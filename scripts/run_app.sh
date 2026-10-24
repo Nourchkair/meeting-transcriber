@@ -98,12 +98,25 @@ GIT_HASH=$(git -C "$TRANSCRIBER_ROOT" rev-parse --short HEAD 2>/dev/null || echo
 /usr/libexec/PlistBuddy -c "Set :GitCommitHash $GIT_HASH" "$APP_BUNDLE/Contents/Info.plist"
 
 cp "$BUILD_BINARY" "$APP_BINARY"
+# SwiftPM links Sparkle through @rpath. Match the release bundle layout so the
+# development app can load the updater framework at launch too.
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BINARY"
 if [ ! -x "$HELPER_BUILD_BINARY" ]; then
     echo "ERROR: SwiftPM did not build SawtiCaptureHelper" >&2
     exit 1
 fi
 mkdir -p "$(dirname "$APP_HELPER")"
 cp "$HELPER_BUILD_BINARY" "$APP_HELPER"
+
+SPARKLE_FRAMEWORK="$SPM_DIR/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+if [ ! -d "$SPARKLE_FRAMEWORK" ]; then
+    echo "ERROR: Sparkle.framework was not resolved by SwiftPM" >&2
+    exit 1
+fi
+APP_FRAMEWORKS="$APP_BUNDLE/Contents/Frameworks"
+mkdir -p "$APP_FRAMEWORKS"
+rm -rf "$APP_FRAMEWORKS/Sparkle.framework"
+ditto "$SPARKLE_FRAMEWORK" "$APP_FRAMEWORKS/Sparkle.framework"
 
 # Licences for the third-party code and weights this bundle redistributes. The
 # dev app is not distributed, but scripts/e2e-app.sh deploys it, so keeping it
