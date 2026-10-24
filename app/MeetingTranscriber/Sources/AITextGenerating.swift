@@ -9,7 +9,9 @@ protocol AITextGenerating: Sendable {
 }
 
 extension AITextGenerating {
-    var supportsImageInput: Bool { false }
+    var supportsImageInput: Bool {
+        false
+    }
 
     func generateText(systemPrompt: String, userPrompt: String, imageData: Data?) async throws -> String {
         guard imageData == nil else { throw AITextGenerationError.imageInputUnavailable }

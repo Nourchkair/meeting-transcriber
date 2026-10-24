@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 #if !APPSTORE
-import Sparkle
+    import Sparkle
 #endif
 
 private struct SemanticReleaseVersion: Comparable {
@@ -15,7 +15,9 @@ private struct SemanticReleaseVersion: Comparable {
     private let patch: Int
     private let prerelease: [Identifier]?
 
-    var isPreRelease: Bool { prerelease != nil }
+    var isPreRelease: Bool {
+        prerelease != nil
+    }
 
     static func parse(_ value: String) -> Self? {
         var version = value
@@ -84,53 +86,55 @@ private struct SemanticReleaseVersion: Comparable {
 }
 
 #if !APPSTORE
-@MainActor
-private final class SparkleUpdateConfiguration {
-    var includePreReleases = false
-    var isPreReleaseBuild = false
-    var isSafeToInstall: () -> Bool = { true }
+    @MainActor
+    private final class SparkleUpdateConfiguration {
+        var includePreReleases = false
+        var isPreReleaseBuild = false
+        var isSafeToInstall: () -> Bool = { true }
 
-    var usesBetaFeed: Bool { includePreReleases || isPreReleaseBuild }
+        var usesBetaFeed: Bool {
+            includePreReleases || isPreReleaseBuild
+        }
 
-    func requireSafeInstall() throws {
-        guard !isSafeToInstall() else { return }
-        throw NSError(
-            domain: "com.nourchkair.sawti.updates",
-            code: 1,
-            userInfo: [NSLocalizedDescriptionKey: "Sawti pauses updates while recording or processing audio. Try again when it is idle."],
-        )
-    }
-}
-
-@MainActor
-private final class SawtiSparkleUpdaterDelegate: NSObject, SPUUpdaterDelegate {
-    private let configuration: SparkleUpdateConfiguration
-    private let betaFeedURL = "https://raw.githubusercontent.com/Nourchkair/Sawti/beta-feed/appcast.xml"
-
-    init(configuration: SparkleUpdateConfiguration) {
-        self.configuration = configuration
+        func requireSafeInstall() throws {
+            guard !isSafeToInstall() else { return }
+            throw NSError(
+                domain: "com.nourchkair.sawti.updates",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Sawti pauses updates while recording or processing audio. Try again when it is idle."],
+            )
+        }
     }
 
-    func feedURLString(for updater: SPUUpdater) -> String? {
-        configuration.usesBetaFeed ? betaFeedURL : nil
-    }
+    @MainActor
+    private final class SawtiSparkleUpdaterDelegate: NSObject, SPUUpdaterDelegate {
+        private let configuration: SparkleUpdateConfiguration
+        private let betaFeedURL = "https://raw.githubusercontent.com/Nourchkair/Sawti/beta-feed/appcast.xml"
 
-    func allowedChannels(for updater: SPUUpdater) -> Set<String> {
-        configuration.usesBetaFeed ? ["beta"] : []
-    }
+        init(configuration: SparkleUpdateConfiguration) {
+            self.configuration = configuration
+        }
 
-    func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
-        try configuration.requireSafeInstall()
-    }
+        func feedURLString(for _: SPUUpdater) -> String? {
+            configuration.usesBetaFeed ? betaFeedURL : nil
+        }
 
-    func updater(
-        _ updater: SPUUpdater,
-        shouldProceedWithUpdate updateItem: SUAppcastItem,
-        updateCheck: SPUUpdateCheck,
-    ) throws {
-        try configuration.requireSafeInstall()
+        func allowedChannels(for _: SPUUpdater) -> Set<String> {
+            configuration.usesBetaFeed ? ["beta"] : []
+        }
+
+        func updater(_: SPUUpdater, mayPerform _: SPUUpdateCheck) throws {
+            try configuration.requireSafeInstall()
+        }
+
+        func updater(
+            _: SPUUpdater,
+            shouldProceedWithUpdate _: SUAppcastItem,
+            updateCheck _: SPUUpdateCheck,
+        ) throws {
+            try configuration.requireSafeInstall()
+        }
     }
-}
 #endif
 
 // MARK: - Models
@@ -250,11 +254,11 @@ final class UpdateChecker {
     private let currentVersionTag: String
     private var checkTask: Task<Void, Never>?
     private var periodicTask: Task<Void, Never>?
-#if !APPSTORE
-    private let updaterController: SPUStandardUpdaterController?
-    @ObservationIgnored private var sparkleConfiguration: SparkleUpdateConfiguration?
-    @ObservationIgnored private var sparkleDelegate: SawtiSparkleUpdaterDelegate?
-#endif
+    #if !APPSTORE
+        private let updaterController: SPUStandardUpdaterController?
+        @ObservationIgnored private var sparkleConfiguration: SparkleUpdateConfiguration?
+        @ObservationIgnored private var sparkleDelegate: SawtiSparkleUpdaterDelegate?
+    #endif
 
     init(provider: any UpdateProviding = GitHubReleaseProvider()) {
         self.provider = provider
@@ -262,62 +266,62 @@ final class UpdateChecker {
             Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
         self.currentVersionTag = version
         self.isPreReleaseBuild = SemanticReleaseVersion.parse(version)?.isPreRelease ?? false
-#if !APPSTORE
-        let info = Bundle.main.infoDictionary ?? [:]
-        if (info["SUFeedURL"] as? String)?.isEmpty == false,
-           (info["SUPublicEDKey"] as? String)?.isEmpty == false {
-            let configuration = SparkleUpdateConfiguration()
-            configuration.isPreReleaseBuild = isPreReleaseBuild
-            let delegate = SawtiSparkleUpdaterDelegate(configuration: configuration)
-            self.sparkleConfiguration = configuration
-            self.sparkleDelegate = delegate
-            self.updaterController = SPUStandardUpdaterController(
-                startingUpdater: true,
-                updaterDelegate: delegate,
-                userDriverDelegate: nil,
-            )
-        } else {
-            // Developer builds have no appcast or update-signing key. Keep the
-            // release updater disabled rather than pointing a local build at a
-            // feed it cannot safely install from.
-            self.updaterController = nil
-        }
-#endif
+        #if !APPSTORE
+            let info = Bundle.main.infoDictionary ?? [:]
+            if (info["SUFeedURL"] as? String)?.isEmpty == false,
+               (info["SUPublicEDKey"] as? String)?.isEmpty == false {
+                let configuration = SparkleUpdateConfiguration()
+                configuration.isPreReleaseBuild = isPreReleaseBuild
+                let delegate = SawtiSparkleUpdaterDelegate(configuration: configuration)
+                self.sparkleConfiguration = configuration
+                self.sparkleDelegate = delegate
+                self.updaterController = SPUStandardUpdaterController(
+                    startingUpdater: true,
+                    updaterDelegate: delegate,
+                    userDriverDelegate: nil,
+                )
+            } else {
+                // Developer builds have no appcast or update-signing key. Keep the
+                // release updater disabled rather than pointing a local build at a
+                // feed it cannot safely install from.
+                self.updaterController = nil
+            }
+        #endif
     }
 
     var canInstallUpdates: Bool {
-#if APPSTORE
-        false
-#else
-        updaterController != nil
-#endif
+        #if APPSTORE
+            false
+        #else
+            updaterController != nil
+        #endif
     }
 
     /// Opens Sparkle's native download, install, and relaunch flow. This is
     /// used by both the settings button and the menu-bar update notification.
     func installAvailableUpdate() {
-#if !APPSTORE
-        updaterController?.checkForUpdates(nil)
-#endif
+        #if !APPSTORE
+            updaterController?.checkForUpdates(nil)
+        #endif
     }
 
     func setAutomaticChecksEnabled(_ enabled: Bool) {
-#if !APPSTORE
-        updaterController?.updater.automaticallyChecksForUpdates = enabled
-        updaterController?.updater.automaticallyDownloadsUpdates = enabled
-#endif
+        #if !APPSTORE
+            updaterController?.updater.automaticallyChecksForUpdates = enabled
+            updaterController?.updater.automaticallyDownloadsUpdates = enabled
+        #endif
     }
 
     func setIncludePreReleases(_ enabled: Bool) {
-#if !APPSTORE
-        sparkleConfiguration?.includePreReleases = enabled
-#endif
+        #if !APPSTORE
+            sparkleConfiguration?.includePreReleases = enabled
+        #endif
     }
 
     func setUpdateSafetyCheck(_ isSafeToInstall: @escaping () -> Bool) {
-#if !APPSTORE
-        sparkleConfiguration?.isSafeToInstall = isSafeToInstall
-#endif
+        #if !APPSTORE
+            sparkleConfiguration?.isSafeToInstall = isSafeToInstall
+        #endif
     }
 
     func checkNow(includePreReleases: Bool = false) {

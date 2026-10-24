@@ -234,7 +234,7 @@ final class PipelineQueueRetryTests: XCTestCase {
         )
         let jobID = try await failOneJob(on: queue, mixPath: createTestAudioFile(in: tmpDir))
         let failed = try XCTUnwrap(queue.jobs.first { $0.id == jobID })
-        let blocker = protocolsDir.appendingPathComponent("\(try XCTUnwrap(failed.namingSlug)).txt")
+        let blocker = try protocolsDir.appendingPathComponent("\(XCTUnwrap(failed.namingSlug)).txt")
         XCTAssertTrue(FileManager.default.fileExists(atPath: blocker.path), "test premise: final transcript path was blocked")
         let store = SpeakerNamingStore(outputDir: outputDir)
         XCTAssertNotNil(queue.speakerNamingDataByJob[jobID], "test premise: the failed run parked naming data")

@@ -1,5 +1,5 @@
-import Foundation
 @preconcurrency import ApplicationServices
+import Foundation
 
 /// A short interval during which a meeting client explicitly identified the
 /// displayed participant as speaking. Accessibility text and screenshots are
@@ -154,7 +154,6 @@ enum ActiveSpeakerReader {
         }
         return result
     }
-
 }
 
 /// Thread-safe timeline shared by the recording task and the accessibility
@@ -271,7 +270,9 @@ enum ActiveSpeakerNameMatcher {
         }
 
         var merged = mapping
-        for (speaker, name) in assignments { merged[speaker] = name }
+        for (speaker, name) in assignments {
+            merged[speaker] = name
+        }
         return merged
     }
 }

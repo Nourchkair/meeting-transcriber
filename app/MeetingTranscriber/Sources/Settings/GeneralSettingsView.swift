@@ -73,16 +73,20 @@ struct GeneralSettingsView: View {
 
             Section("Presentation") {
                 Toggle("Hide Sawti from screen sharing", isOn: $settings.hideSawtiFromScreenSharing)
-                Text("When enabled, Sawti windows and the live-caption bar are excluded from screen shares and screen captures. You can toggle this quickly from the menu bar.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "When enabled, Sawti windows and the live-caption bar are excluded from screen shares and screen captures. You can toggle this quickly from the menu bar.",
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             Section("AI & Screen Awareness") {
                 Toggle("Screen awareness during recording", isOn: $settings.continuousScreenAwarenessEnabled)
-                Text("When enabled, Sawti samples the main display every 3 seconds during a recording. The latest frame stays on your Mac and is sent to your AI connection only when you ask a question. Off by default; Screen Recording permission is required.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "When enabled, Sawti samples the main display every 3 seconds during a recording. The latest frame stays on your Mac and is sent to your AI connection only when you ask a question. Off by default; Screen Recording permission is required.",
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             Section("Keyboard Shortcuts") {

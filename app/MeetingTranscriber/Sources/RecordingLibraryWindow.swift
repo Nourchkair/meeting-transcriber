@@ -48,17 +48,21 @@ struct RecordingLibraryWindow: View {
     private var filteredEntries: [RecordingLibraryItem] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return entries.filter { item in
-            let workspaceMatches: Bool
-            switch workspaceFilter {
-            case .all: workspaceMatches = true
-            case .unassigned: workspaceMatches = item.workspaceID == nil
-            case let .workspace(id): workspaceMatches = item.workspaceID == id
+            let workspaceMatches: Bool = switch workspaceFilter {
+            case .all: true
+            case .unassigned: item.workspaceID == nil
+            case let .workspace(id): item.workspaceID == id
             }
             guard workspaceMatches, sourceFilter.matches(item.recordingSource) else { return false }
             guard !query.isEmpty else { return true }
-            let metadata = [item.title, item.appName ?? "", item.participants.joined(separator: " "),
-                            workspaceName(for: item.workspaceID) ?? "", item.statusLabel]
-                .joined(separator: " ").lowercased()
+            let metadata = [
+                item.title,
+                item.appName ?? "",
+                item.participants.joined(separator: " "),
+                workspaceName(for: item.workspaceID) ?? "",
+                item.statusLabel,
+            ]
+            .joined(separator: " ").lowercased()
             return metadata.contains(query) || (transcriptSearchIndex[item.id] ?? "").contains(query)
         }
     }
@@ -70,16 +74,21 @@ struct RecordingLibraryWindow: View {
 
     private var reloadKey: String {
         let jobKey = jobs.map { job in
-            [job.id.uuidString, job.state.rawValue, job.libraryRecordingID ?? "", job.namingSlug ?? "", job.transcriptPath?.path ?? "", job.liveTranscriptPath?.path ?? ""]
-                .joined(separator: ":")
+            [
+                job.id.uuidString,
+                job.state.rawValue,
+                job.libraryRecordingID ?? "",
+                job.namingSlug ?? "",
+                job.transcriptPath?.path ?? "",
+                job.liveTranscriptPath?.path ?? "",
+            ]
+            .joined(separator: ":")
         }.joined(separator: "|")
         return "\(outputDirectory.path)|\(jobKey)"
     }
 
     private func isTranscribing(_ item: RecordingLibraryItem) -> Bool {
-        let sourcePaths = Set(item.transcriptionURLs(outputDirectory: outputDirectory).map {
-            $0.standardizedFileURL.path
-        })
+        let sourcePaths = Set(item.transcriptionURLs(outputDirectory: outputDirectory).map(\.standardizedFileURL.path))
         return jobs.contains { job in
             guard !job.state.isTerminal else { return false }
             return [job.mixPath, job.appPath, job.micPath].compactMap(\.self).contains {
@@ -169,7 +178,9 @@ struct RecordingLibraryWindow: View {
             Button("Cancel", role: .cancel) { itemPendingDelete = nil }
         } message: {
             if let itemPendingDelete {
-                Text("This permanently deletes Sawti’s saved audio, transcripts, meeting notes, transcript edits and highlights, bookmarks, and Library metadata for “\(itemPendingDelete.title)”. The original file you imported from elsewhere is left untouched.")
+                Text(
+                    "This permanently deletes Sawti’s saved audio, transcripts, meeting notes, transcript edits and highlights, bookmarks, and Library metadata for “\(itemPendingDelete.title)”. The original file you imported from elsewhere is left untouched.",
+                )
             }
         }
         .confirmationDialog(
@@ -433,7 +444,7 @@ struct RecordingLibraryWindow: View {
                 let openedScope = directory.startAccessingSecurityScopedResource()
                 defer { if openedScope { directory.stopAccessingSecurityScopedResource() } }
                 return Dictionary(uniqueKeysWithValues: loaded.map { item in
-                    let urls = [item.transcriptURL, item.originalTranscriptURL].compactMap { $0 }
+                    let urls = [item.transcriptURL, item.originalTranscriptURL].compactMap(\.self)
                     let text = urls.compactMap { url -> String? in
                         guard let source = try? String(contentsOf: url, encoding: .utf8) else { return nil }
                         let corrected = TranscriptEditorDocumentStore.correctedTranscript(for: url)
@@ -649,7 +660,9 @@ private enum RecordingSourceFilter: String, CaseIterable, Identifiable {
     case app
     case imported
 
-    var id: Self { self }
+    var id: Self {
+        self
+    }
 
     var label: String {
         switch self {
@@ -826,7 +839,7 @@ private struct RecordingLibraryDetail: View {
         .help("Choose the workspace for this recording and its attached materials")
     }
 
-    @ViewBuilder private var primaryActions: some View {
+    private var primaryActions: some View {
         HStack(spacing: 8) {
             if let audioURL = item.audioURL {
                 Button {
@@ -957,7 +970,7 @@ private struct RecordingLibraryDetail: View {
                     .font(.caption.monospacedDigit())
                 Slider(
                     value: Binding(get: { playback.currentTime }, set: { playback.seek(to: $0) }),
-                    in: 0...max(1, playback.duration),
+                    in: 0 ... max(1, playback.duration),
                 )
                 Text(playback.duration.formatted(.number.precision(.fractionLength(0))))
                     .font(.caption.monospacedDigit())
@@ -994,9 +1007,11 @@ private struct RecordingLibraryDetail: View {
             }
             .buttonStyle(.link)
             .help("Play this edited audio copy")
-            Text("\(edit.startOffset.formatted(.number.precision(.fractionLength(0))))–\(edit.endOffset.formatted(.number.precision(.fractionLength(0)))) sec · \(edit.kind == .trimmed ? "Trimmed" : "Split part")")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text(
+                "\(edit.startOffset.formatted(.number.precision(.fractionLength(0))))–\(edit.endOffset.formatted(.number.precision(.fractionLength(0)))) sec · \(edit.kind == .trimmed ? "Trimmed" : "Split part")",
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
     }
 

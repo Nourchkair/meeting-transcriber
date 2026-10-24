@@ -18,11 +18,11 @@ struct MenuBarView: View {
     /// to avoid on the picker.
     let manualRecordingPendingOrActive: Bool
     let onStopManualRecording: (() -> Void)?
-    var onAddBookmark: (() -> Void)? = nil
+    var onAddBookmark: (() -> Void)?
     var recordingBookmarkCount = 0
     let onOpenLastProtocol: () -> Void
     let onOpenProtocol: (URL) -> Void
-    var onViewTranscript: ((URL) -> Void)? = nil
+    var onViewTranscript: ((URL) -> Void)?
     let onOpenSettings: () -> Void
     let onNameSpeakers: (() -> Void)?
     let onOpenLibrary: () -> Void
@@ -175,7 +175,7 @@ struct MenuBarView: View {
                     systemImage: "bookmark.fill",
                 )
             }
-                .keyboardShortcut("b", modifiers: [.command, .shift])
+            .keyboardShortcut("b", modifiers: [.command, .shift])
         }
 
         if let onNameSpeakers {

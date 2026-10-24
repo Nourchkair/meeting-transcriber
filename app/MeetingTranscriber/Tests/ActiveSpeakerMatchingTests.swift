@@ -29,7 +29,7 @@ final class ActiveSpeakerMatchingTests: XCTestCase {
 
     func testDoesNotTreatFocusOrRosterPresenceAsSpeakingEvidence() {
         XCTAssertNil(ActiveSpeakerCueParser.name(from: ["Alice Johnson", "Bob Singh"]))
-        XCTAssertNil(ActiveSpeakerCueParser.name(from: ["Alice Johnson", "Focused"] ))
+        XCTAssertNil(ActiveSpeakerCueParser.name(from: ["Alice Johnson", "Focused"]))
         XCTAssertNil(ActiveSpeakerCueParser.name(from: ["Alice is speaking", "Bob is speaking"]))
     }
 

@@ -5,7 +5,7 @@ import Observation
 @Observable
 @MainActor
 final class LiveAssistantController {
-    private static let maximumTranscriptCharacters = 18_000
+    private static let maximumTranscriptCharacters = 18000
     private static let maximumConversationMessages = 8
 
     let settings: AppSettings
@@ -255,11 +255,10 @@ final class LiveAssistantController {
     }
 
     private func liveTranscriptContext() -> String {
-        let transcript: String
-        if let transcriptContextOverride {
-            transcript = transcriptContextOverride
+        let transcript: String = if let transcriptContextOverride {
+            transcriptContextOverride
         } else {
-            transcript = captions.recordingFinals
+            captions.recordingFinals
                 .sorted { $0.finalizedAt < $1.finalizedAt }
                 .map { "\($0.speaker): \($0.text)" }
                 .joined(separator: "\n")

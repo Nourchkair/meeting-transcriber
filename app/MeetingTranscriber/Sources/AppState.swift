@@ -283,7 +283,7 @@ final class AppState {
             guard let self else { return true }
             let queue = self.pipeline.queue
             return !self.watching.isRecording && !queue.isProcessing &&
-                queue.jobs.allSatisfy { $0.state.isTerminal }
+                queue.jobs.allSatisfy(\.state.isTerminal)
         }
 
         // Wire the active-engine source + the watch-start up-front engine sync

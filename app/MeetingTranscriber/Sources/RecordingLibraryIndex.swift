@@ -8,7 +8,9 @@ enum RecordingSourceKind: String, Codable, CaseIterable, Identifiable, Sendable 
     case app
     case imported
 
-    var id: Self { self }
+    var id: Self {
+        self
+    }
 
     var label: String {
         switch self {

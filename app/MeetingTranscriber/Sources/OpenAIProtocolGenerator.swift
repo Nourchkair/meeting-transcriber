@@ -74,7 +74,9 @@ struct OpenAIProtocolGenerator: ProtocolGenerating, AITextGenerating {
         try await generateText(systemPrompt: systemPrompt, userPrompt: userPrompt, imageData: nil)
     }
 
-    var supportsImageInput: Bool { true }
+    var supportsImageInput: Bool {
+        true
+    }
 
     func generateText(systemPrompt: String, userPrompt: String, imageData: Data?) async throws -> String {
         let userContent: Any

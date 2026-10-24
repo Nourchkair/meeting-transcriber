@@ -1150,13 +1150,12 @@ extension PipelineQueue {
                 // Keep the user's selected source untouched, and also keep an
                 // app-owned copy so this Library recording remains playable if
                 // the original file is later moved or removed.
-                let copiedDestination: URL
-                if suffix == RecordingFileSuffix.mix, src.pathExtension.lowercased() != "wav" {
-                    copiedDestination = outputDir.appendingPathComponent(
+                let copiedDestination: URL = if suffix == RecordingFileSuffix.mix, src.pathExtension.lowercased() != "wav" {
+                    outputDir.appendingPathComponent(
                         "\(ctx.slug)_source.\(src.pathExtension)",
                     )
                 } else {
-                    copiedDestination = dst
+                    dst
                 }
                 if fm.fileExists(atPath: copiedDestination.path) {
                     logger.info("Imported audio copy already exists: \(copiedDestination.lastPathComponent, privacy: .private)")

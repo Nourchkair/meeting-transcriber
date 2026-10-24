@@ -67,9 +67,11 @@ struct AboutSettingsView: View {
         Section("Updates") {
             Toggle("Automatic Updates", isOn: $settings.checkForUpdates)
 
-            Text("Sawti checks for updates and downloads them in the background. Sparkle installs a downloaded update when you quit Sawti, then relaunches it. Updates pause while recording or processing audio. Use Check Now for a manual update.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text(
+                "Sawti checks for updates and downloads them in the background. Sparkle installs a downloaded update when you quit Sawti, then relaunches it. Updates pause while recording or processing audio. Use Check Now for a manual update.",
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
 
             if settings.checkForUpdates, !updateChecker.isPreReleaseBuild {
                 Toggle("Include Pre-Releases", isOn: $settings.includePreReleases)
