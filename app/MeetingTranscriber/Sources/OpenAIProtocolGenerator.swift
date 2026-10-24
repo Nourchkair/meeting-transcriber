@@ -4,7 +4,7 @@ import os.log
 private let logger = Logger(subsystem: AppPaths.logSubsystem, category: "OpenAIProtocolGenerator")
 
 /// Generates meeting protocols via an OpenAI-compatible HTTP API (e.g. Ollama, LM Studio, llama.cpp).
-struct OpenAIProtocolGenerator: ProtocolGenerating {
+struct OpenAIProtocolGenerator: ProtocolGenerating, AITextGenerating {
     let endpoint: URL
     let model: String
     let apiKey: String?
@@ -67,9 +67,32 @@ struct OpenAIProtocolGenerator: ProtocolGenerating {
             meetingStartTime: meetingStartTime,
         )
 
+        return try await generateText(systemPrompt: systemPrompt, userPrompt: transcript)
+    }
+
+    func generateText(systemPrompt: String, userPrompt: String) async throws -> String {
+        try await generateText(systemPrompt: systemPrompt, userPrompt: userPrompt, imageData: nil)
+    }
+
+    var supportsImageInput: Bool { true }
+
+    func generateText(systemPrompt: String, userPrompt: String, imageData: Data?) async throws -> String {
+        let userContent: Any
+        if let imageData {
+            let encodedImage = imageData.base64EncodedString()
+            userContent = [
+                ["type": "text", "text": userPrompt],
+                [
+                    "type": "image_url",
+                    "image_url": ["url": "data:image/jpeg;base64,\(encodedImage)", "detail": "high"],
+                ],
+            ] as [[String: Any]]
+        } else {
+            userContent = userPrompt
+        }
         let messages: [[String: Any]] = [
             ["role": "system", "content": systemPrompt],
-            ["role": "user", "content": transcript],
+            ["role": "user", "content": userContent],
         ]
 
         do {

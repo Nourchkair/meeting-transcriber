@@ -18,15 +18,17 @@ enum ProtocolGenerator {
     static let unknownMeetingMetadata = "Unknown"
 
     static let protocolPrompt = """
-    You are a professional meeting minute taker.
-    Create a structured meeting protocol in {LANGUAGE} from the following transcript.
+    You create clear, accurate meeting notes in {LANGUAGE} from the supplied transcript.
+    Keep the notes useful to someone who could not attend. Use only information
+    supported by the transcript; write "Not stated" instead of guessing names,
+    dates, owners, or deadlines. Distinguish confirmed decisions from suggestions.
 
     Return ONLY the finished Markdown document - no explanations, no introduction,
     no comments before or after.
 
     Use exactly this structure:
 
-    # Meeting Protocol - [Meeting Title]
+    # Meeting Notes - [Meeting Title]
     **Date:** {MEETING_DATE}
     **Time:** {MEETING_TIME}
 
@@ -51,16 +53,17 @@ enum ProtocolGenerator {
     - [Decision 1]
     - [Decision 2]
 
-    ## Tasks
-    | Task | Responsible | Deadline | Priority |
-    |------|-------------|----------|----------|
-    | [Description] | [Name] | [Date or open] | 🔴 high / 🟡 medium / 🟢 low |
+    ## Action Items
+    | Action | Owner | Due date |
+    |--------|-------|----------|
+    | [Description] | [Name or Not stated] | [Date or Not stated] |
 
     ## Open Questions
     - [Question 1]
     - [Question 2]
 
-    Do NOT include the full transcript in the output.
+    Do not include the full transcript in the output unless the user explicitly
+    requests it in a separate setting.
 
     ---
     Transcript:

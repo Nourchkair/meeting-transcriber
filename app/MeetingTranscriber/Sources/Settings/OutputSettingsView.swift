@@ -77,13 +77,22 @@ struct OutputSettingsView: View {
             }
             .accessibilityIdentifier(A11yID.outputFolderSection)
 
-            Section("Meeting Notes") {
+            Section("AI Notes & Connection") {
+                Toggle("Automatically create AI meeting notes", isOn: $settings.aiNotesEnabled)
+                Text("When enabled, Sawti sends the completed transcript to the selected AI connection after processing. Nothing is sent when this is off.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text("This connection is shared by AI meeting notes and other Sawti AI features.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Toggle("Include full transcript in notes", isOn: $settings.includeFullTranscriptInProtocol)
                     .accessibilityIdentifier(A11yID.includeFullTranscriptToggle)
                     Toggle("Save original transcript separately", isOn: $settings.saveRawTranscriptSeparately)
                     .accessibilityIdentifier(A11yID.saveRawTranscriptToggle)
 
-                Picker("AI service", selection: $settings.protocolProvider) {
+                Picker("AI connection", selection: $settings.protocolProvider) {
                     ForEach(ProtocolProvider.allCases, id: \.self) { provider in
                         Text(provider.label).tag(provider)
                     }
@@ -142,6 +151,9 @@ struct OutputSettingsView: View {
         case .openAICompatible:
             openAIConfigView
 
+        case .chatGPTPlan:
+            ChatGPTPlanConnectionSettings(settings: settings)
+
         case .none:
             Text("No LLM summarization will be generated. Raw transcripts are retained if no protocol is saved.")
                 .font(.caption)
@@ -155,7 +167,7 @@ struct OutputSettingsView: View {
             Text("Endpoint")
             TextField("http://localhost:1234/v1", text: $settings.openAIEndpoint)
                 .textFieldStyle(.roundedBorder)
-            Text("Base URL (e.g. http://localhost:1234/v1) or full chat-completions URL — both work.")
+            Text("Use an OpenAI API endpoint or a local OpenAI-compatible server such as Ollama or LM Studio. Hosted API usage is billed separately from a ChatGPT subscription.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -224,22 +236,22 @@ struct OutputSettingsView: View {
     private var promptControls: some View {
         // swiftlint:disable:next closure_body_length
         HStack {
-            Button("Edit Prompt") {
+            Button("Edit Notes Prompt") {
                 openCustomPrompt()
                 refreshCustomPromptState()
             }
 
-            Button("Import Prompt") {
+            Button("Import Notes Prompt") {
                 importCustomPrompt()
                 refreshCustomPromptState()
             }
 
-            Button("Reset to Default") {
+            Button("Reset Notes Prompt") {
                 showResetPromptConfirmation = true
             }
             .disabled(!hasCustomPrompt)
             .confirmationDialog(
-                "Reset protocol prompt to the built-in default?",
+                "Reset meeting notes prompt to the built-in default?",
                 isPresented: $showResetPromptConfirmation,
                 titleVisibility: .visible,
             ) {

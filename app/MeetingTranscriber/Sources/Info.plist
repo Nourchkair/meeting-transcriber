@@ -29,7 +29,7 @@
     <key>NSMicrophoneUsageDescription</key>
     <string>Sawti needs microphone access to record audio for transcription.</string>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>Sawti uses Screen Recording permission to detect active meetings by reading window titles.</string>
+    <string>Sawti uses Screen Recording permission to detect active meetings and capture your screen once when you ask the AI assistant to analyze it.</string>
     <key>NSAccessibilityUsageDescription</key>
     <string>Sawti uses Accessibility to read meeting participant and active-speaker labels for optional speaker naming.</string>
 </dict>

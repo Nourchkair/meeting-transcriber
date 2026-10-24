@@ -39,6 +39,11 @@ final class LiveTranscriptionCoordinator {
     /// deferred; applied at the next idle `flush()`.
     private var needsRewarmWhenIdle = false
 
+    /// The active recording's stop-time draft capture. A fast stop→start can
+    /// otherwise let `prepareForNextRecording()` clear caption state before
+    /// `finishRecording()` snapshots it.
+    private var finishRecordingTask: Task<String?, Never>?
+
     /// True while `attachSinks` is mid-flight (it awaits `prepareForNextRecording()`
     /// between reading the controller and installing its sinks). The deferred
     /// re-warm in `flush()` must not swap the controller out during that window,
@@ -156,6 +161,9 @@ final class LiveTranscriptionCoordinator {
         guard captionsEligible, let controller else { return }
         attachInFlight = true
         defer { attachInFlight = false }
+        if let finishRecordingTask {
+            _ = await finishRecordingTask.value
+        }
         await controller.prepareForNextRecording()
         recorder.micLiveSink = controller.micSink
         recorder.appLiveSink = controller.appSink
@@ -179,6 +187,20 @@ final class LiveTranscriptionCoordinator {
             controller = nil
             prewarmIfEligible()
         }
+    }
+
+    /// Finalize live recognition before the recording is admitted to the main
+    /// pipeline, then return the saved draft for attachment to that recording.
+    func finishRecording(startedAt: Date) async -> String? {
+        guard controller != nil else { return nil }
+        let task = Task { @MainActor in
+            await self.flush()
+            return self.captions.recordingTranscript(startedAt: startedAt)
+        }
+        finishRecordingTask = task
+        let transcript = await task.value
+        finishRecordingTask = nil
+        return transcript
     }
 
     /// Eagerly load the VAD + engine models when the toggle is on (or already on

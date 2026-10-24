@@ -28,6 +28,12 @@ struct MenuBarView: View {
     let onOpenLibrary: () -> Void
     let onDismissJob: (UUID) -> Void
     let onQuit: () -> Void
+    var onOpenLiveAssistant: () -> Void = {}
+    var liveAssistantShortcutLabel: String = "⌘⇧A"
+    var isScreenAwarenessEnabled = false
+    var onToggleScreenAwareness: () -> Void = {}
+    var isPresentationMode = true
+    var onTogglePresentationMode: () -> Void = {}
 
     private var state: TranscriberState {
         status?.state ?? .idle
@@ -188,6 +194,28 @@ struct MenuBarView: View {
         }
         .keyboardShortcut("p")
         .help("Open your recordings, transcripts, and workspaces")
+
+        Button(action: onOpenLiveAssistant) {
+            Label("Live Assistant…", systemImage: "sparkles")
+        }
+        .help("Ask Sawti about the live meeting or a captured screen (\(liveAssistantShortcutLabel))")
+
+        Button(action: onToggleScreenAwareness) {
+            Label(
+                isScreenAwarenessEnabled ? "Screen Awareness: On" : "Screen Awareness: Off",
+                systemImage: isScreenAwarenessEnabled ? "eye.fill" : "eye.slash",
+            )
+        }
+        .help("Sample the main display during recordings; send its latest frame only when you ask")
+
+        Button(action: onTogglePresentationMode) {
+            Label(
+                isPresentationMode ? "Presentation Mode: On" : "Presentation Mode: Off",
+                systemImage: "rectangle.on.rectangle",
+            )
+        }
+        .keyboardShortcut("p", modifiers: [.command, .shift])
+        .help("Keep Sawti windows out of screen sharing")
     }
 
     @ViewBuilder private var processingQueue: some View {

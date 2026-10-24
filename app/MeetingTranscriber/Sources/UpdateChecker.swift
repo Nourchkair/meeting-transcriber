@@ -4,6 +4,135 @@ import Observation
 import Sparkle
 #endif
 
+private struct SemanticReleaseVersion: Comparable {
+    private enum Identifier: Equatable {
+        case number(Int)
+        case text(String)
+    }
+
+    private let major: Int
+    private let minor: Int
+    private let patch: Int
+    private let prerelease: [Identifier]?
+
+    var isPreRelease: Bool { prerelease != nil }
+
+    static func parse(_ value: String) -> Self? {
+        var version = value
+        if version.hasPrefix("v") { version.removeFirst() }
+        version = String(version.split(separator: "+", maxSplits: 1, omittingEmptySubsequences: false)[0])
+
+        let sections = version.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
+        let core = sections[0].split(separator: ".", omittingEmptySubsequences: false)
+        guard core.count == 3,
+              let major = Int(core[0]), let minor = Int(core[1]), let patch = Int(core[2])
+        else { return nil }
+
+        var prerelease: [Identifier]?
+        if sections.count == 2 {
+            let rawIdentifiers = sections[1].split(separator: ".", omittingEmptySubsequences: false)
+            guard !rawIdentifiers.isEmpty else { return nil }
+            var identifiers: [Identifier] = []
+            for rawIdentifier in rawIdentifiers {
+                let identifier = String(rawIdentifier)
+                guard !identifier.isEmpty,
+                      identifier.utf8.allSatisfy({
+                          (48 ... 57).contains($0) || (65 ... 90).contains($0) ||
+                              (97 ... 122).contains($0) || $0 == 45
+                      })
+                else { return nil }
+                if identifier.allSatisfy(\.isNumber) {
+                    guard identifier == "0" || !identifier.hasPrefix("0"),
+                          let number = Int(identifier)
+                    else { return nil }
+                    identifiers.append(.number(number))
+                } else {
+                    identifiers.append(.text(identifier))
+                }
+            }
+            prerelease = identifiers
+        }
+        return Self(major: major, minor: minor, patch: patch, prerelease: prerelease)
+    }
+
+    static func < (lhs: Self, rhs: Self) -> Bool {
+        if lhs.major != rhs.major { return lhs.major < rhs.major }
+        if lhs.minor != rhs.minor { return lhs.minor < rhs.minor }
+        if lhs.patch != rhs.patch { return lhs.patch < rhs.patch }
+
+        switch (lhs.prerelease, rhs.prerelease) {
+        case (nil, nil), (nil, .some(_)):
+            return false
+        case (.some(_), nil):
+            return true
+        case let (.some(left), .some(right)):
+            for (leftIdentifier, rightIdentifier) in zip(left, right) {
+                switch (leftIdentifier, rightIdentifier) {
+                case let (.number(leftNumber), .number(rightNumber)):
+                    if leftNumber != rightNumber { return leftNumber < rightNumber }
+                case (.number, .text):
+                    return true
+                case (.text, .number):
+                    return false
+                case let (.text(leftText), .text(rightText)):
+                    if leftText != rightText { return leftText < rightText }
+                }
+            }
+            return left.count < right.count
+        }
+    }
+}
+
+#if !APPSTORE
+@MainActor
+private final class SparkleUpdateConfiguration {
+    var includePreReleases = false
+    var isPreReleaseBuild = false
+    var isSafeToInstall: () -> Bool = { true }
+
+    var usesBetaFeed: Bool { includePreReleases || isPreReleaseBuild }
+
+    func requireSafeInstall() throws {
+        guard !isSafeToInstall() else { return }
+        throw NSError(
+            domain: "com.nourchkair.sawti.updates",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "Sawti pauses updates while recording or processing audio. Try again when it is idle."],
+        )
+    }
+}
+
+@MainActor
+private final class SawtiSparkleUpdaterDelegate: NSObject, SPUUpdaterDelegate {
+    private let configuration: SparkleUpdateConfiguration
+    private let betaFeedURL = "https://raw.githubusercontent.com/Nourchkair/Sawti/beta-feed/appcast.xml"
+
+    init(configuration: SparkleUpdateConfiguration) {
+        self.configuration = configuration
+    }
+
+    func feedURLString(for updater: SPUUpdater) -> String? {
+        configuration.usesBetaFeed ? betaFeedURL : nil
+    }
+
+    func allowedChannels(for updater: SPUUpdater) -> Set<String> {
+        configuration.usesBetaFeed ? ["beta"] : []
+    }
+
+    func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
+        try configuration.requireSafeInstall()
+    }
+
+    func updater(
+        _ updater: SPUUpdater,
+        shouldProceedWithUpdate updateItem: SUAppcastItem,
+        updateCheck: SPUUpdateCheck,
+    ) throws {
+        try configuration.requireSafeInstall()
+    }
+}
+#endif
+
 // MARK: - Models
 
 struct ReleaseInfo: Equatable {
@@ -115,27 +244,36 @@ final class UpdateChecker {
     var isChecking = false
     var lastCheckDate: Date?
     var lastError: String?
+    let isPreReleaseBuild: Bool
 
     private let provider: any UpdateProviding
-    private let currentVersion: (Int, Int, Int)
+    private let currentVersionTag: String
     private var checkTask: Task<Void, Never>?
     private var periodicTask: Task<Void, Never>?
 #if !APPSTORE
     private let updaterController: SPUStandardUpdaterController?
+    @ObservationIgnored private var sparkleConfiguration: SparkleUpdateConfiguration?
+    @ObservationIgnored private var sparkleDelegate: SawtiSparkleUpdaterDelegate?
 #endif
 
     init(provider: any UpdateProviding = GitHubReleaseProvider()) {
         self.provider = provider
         let version =
             Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
-        self.currentVersion = Self.parseVersion(version) ?? (0, 0, 0)
+        self.currentVersionTag = version
+        self.isPreReleaseBuild = SemanticReleaseVersion.parse(version)?.isPreRelease ?? false
 #if !APPSTORE
         let info = Bundle.main.infoDictionary ?? [:]
         if (info["SUFeedURL"] as? String)?.isEmpty == false,
            (info["SUPublicEDKey"] as? String)?.isEmpty == false {
+            let configuration = SparkleUpdateConfiguration()
+            configuration.isPreReleaseBuild = isPreReleaseBuild
+            let delegate = SawtiSparkleUpdaterDelegate(configuration: configuration)
+            self.sparkleConfiguration = configuration
+            self.sparkleDelegate = delegate
             self.updaterController = SPUStandardUpdaterController(
                 startingUpdater: true,
-                updaterDelegate: nil,
+                updaterDelegate: delegate,
                 userDriverDelegate: nil,
             )
         } else {
@@ -166,12 +304,28 @@ final class UpdateChecker {
     func setAutomaticChecksEnabled(_ enabled: Bool) {
 #if !APPSTORE
         updaterController?.updater.automaticallyChecksForUpdates = enabled
+        updaterController?.updater.automaticallyDownloadsUpdates = enabled
+#endif
+    }
+
+    func setIncludePreReleases(_ enabled: Bool) {
+#if !APPSTORE
+        sparkleConfiguration?.includePreReleases = enabled
+#endif
+    }
+
+    func setUpdateSafetyCheck(_ isSafeToInstall: @escaping () -> Bool) {
+#if !APPSTORE
+        sparkleConfiguration?.isSafeToInstall = isSafeToInstall
 #endif
     }
 
     func checkNow(includePreReleases: Bool = false) {
         // Deduplicate concurrent calls
         guard checkTask == nil else { return }
+
+        let shouldIncludePreReleases = includePreReleases || isPreReleaseBuild
+        setIncludePreReleases(shouldIncludePreReleases)
 
         isChecking = true
         lastError = nil
@@ -184,15 +338,14 @@ final class UpdateChecker {
 
             do {
                 let release: ReleaseInfo?
-                if includePreReleases {
+                if shouldIncludePreReleases {
                     let all = try await provider.allReleases()
                     release = all.first { r in
-                        guard let remote = r.version else { return false }
-                        return Self.isNewer(remote, than: currentVersion)
+                        Self.isNewer(r.tagName, than: currentVersionTag)
                     }
                 } else {
                     let latest = try await provider.latestRelease()
-                    if let remote = latest.version, Self.isNewer(remote, than: currentVersion) {
+                    if Self.isNewer(latest.tagName, than: currentVersionTag) {
                         release = latest
                     } else {
                         release = nil
@@ -208,6 +361,7 @@ final class UpdateChecker {
 
     func startPeriodicChecks(settings: AppSettings) {
         periodicTask?.cancel()
+        setIncludePreReleases(settings.includePreReleases || isPreReleaseBuild)
         setAutomaticChecksEnabled(settings.checkForUpdates)
 
         periodicTask = Task {
@@ -243,5 +397,12 @@ final class UpdateChecker {
         if remote.0 != local.0 { return remote.0 > local.0 }
         if remote.1 != local.1 { return remote.1 > local.1 }
         return remote.2 > local.2
+    }
+
+    nonisolated static func isNewer(_ remote: String, than local: String) -> Bool {
+        guard let remoteVersion = SemanticReleaseVersion.parse(remote),
+              let localVersion = SemanticReleaseVersion.parse(local)
+        else { return false }
+        return remoteVersion > localVersion
     }
 }

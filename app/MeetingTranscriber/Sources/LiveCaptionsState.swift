@@ -24,6 +24,14 @@ struct LiveCaptionLine: Hashable, Codable {
     let channel: LiveCaptionChannel
     let text: String
     let speaker: String
+    let finalizedAt: Date
+
+    init(channel: LiveCaptionChannel, text: String, speaker: String, finalizedAt: Date = .now) {
+        self.channel = channel
+        self.text = text
+        self.speaker = speaker
+        self.finalizedAt = finalizedAt
+    }
 }
 
 /// Observable state powering the live caption-bar overlay.
@@ -60,6 +68,16 @@ final class LiveCaptionsState {
     /// Last few finalised utterances across both channels, oldest first.
     /// Capped at `maxFinalsKept`.
     private(set) var recentFinals: [LiveCaptionLine] = []
+
+    /// All finalized live utterances for the active recording. Separate from
+    /// `recentFinals`: the overlay is intentionally short-lived, while this
+    /// recording draft is kept until the post-meeting transcript is ready.
+    private(set) var recordingFinals: [LiveCaptionLine] = []
+
+    /// Changes when the live recorder is reset for another recording. The AI
+    /// assistant uses it to keep one meeting's conversation from leaking into
+    /// the next meeting's context.
+    private(set) var recordingSessionID = UUID()
 
     /// Timestamp of the last event (partial or final). Drives fade-out on
     /// silence — the overlay can compare against `Date()` to dim or hide.
@@ -111,12 +129,19 @@ final class LiveCaptionsState {
         scheduleAutoClear()
     }
 
-    func applyFinalized(_ text: String, channel: LiveCaptionChannel, speaker: String) {
+    func applyFinalized(
+        _ text: String,
+        channel: LiveCaptionChannel,
+        speaker: String,
+        finalizedAt: Date = .now,
+    ) {
         switch channel {
         case .mic: hypothesisMic = ""
         case .app: hypothesisApp = ""
         }
-        recentFinals.append(LiveCaptionLine(channel: channel, text: text, speaker: speaker))
+        let line = LiveCaptionLine(channel: channel, text: text, speaker: speaker, finalizedAt: finalizedAt)
+        recordingFinals.append(line)
+        recentFinals.append(line)
         if recentFinals.count > Self.maxFinalsKept {
             recentFinals.removeFirst(recentFinals.count - Self.maxFinalsKept)
         }
@@ -138,12 +163,33 @@ final class LiveCaptionsState {
     }
 
     func clear() {
+        clearOverlay()
+        recordingFinals.removeAll()
+        recordingSessionID = UUID()
+    }
+
+    /// Clear just the transient overlay content. The saved recording draft
+    /// survives the five-second overlay auto-clear.
+    private func clearOverlay() {
         autoClearTask?.cancel()
         autoClearTask = nil
         hypothesisMic = ""
         hypothesisApp = ""
         recentFinals.removeAll()
         lastEventAt = .distantPast
+    }
+
+    /// Render the accumulated live draft using elapsed meeting offsets so it
+    /// can sit beside the finalized transcript in the same Library recording.
+    func recordingTranscript(startedAt: Date) -> String? {
+        let lines = recordingFinals.sorted { $0.finalizedAt < $1.finalizedAt }
+        guard !lines.isEmpty else { return nil }
+        let rendered = lines.map { line in
+            let seconds = max(0, Int(line.finalizedAt.timeIntervalSince(startedAt)))
+            let timestamp = String(format: "%02d:%02d", seconds / 60, seconds % 60)
+            return "[\(timestamp)] \(line.speaker): \(line.text)"
+        }
+        return rendered.joined(separator: "\n") + "\n"
     }
 
     /// Compute current opacity from a render-time date. Returns 1.0 within
@@ -167,7 +213,7 @@ final class LiveCaptionsState {
             guard let self, !Task.isCancelled else { return }
             // Recheck — a newer event may have arrived during sleep.
             if Date().timeIntervalSince(self.lastEventAt) >= Self.autoClearSeconds {
-                self.clear()
+                self.clearOverlay()
             }
         }
     }

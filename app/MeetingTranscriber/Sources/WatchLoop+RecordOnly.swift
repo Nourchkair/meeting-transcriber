@@ -17,6 +17,8 @@ extension WatchLoop {
         participants: [String],
         activeSpeakerIntervals: [ActiveSpeakerInterval]? = nil,
         bookmarks: [RecordingBookmark] = [],
+        liveTranscript: String? = nil,
+        assistantConversationID: UUID? = nil,
     ) throws {
         let startedAt = recording.recordingStartDate
         // Guard the sidecar's startedAt <= stoppedAt invariant against a
@@ -46,6 +48,16 @@ extension WatchLoop {
         let movedApp = try recording.appPath.map { try Self.move($0, into: destDir) }
         let movedMic = try recording.micPath.map { try Self.move($0, into: destDir) }
 
+        var liveTranscriptFilename: String?
+        if let liveTranscript,
+           !liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let filename = "\(basename)_live.txt"
+            let url = destDir.appendingPathComponent(filename)
+            try liveTranscript.write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.restrictToOwner(url)
+            liveTranscriptFilename = filename
+        }
+
         let sidecar = RecordingSidecar(
             title: title,
             appName: appName,
@@ -58,6 +70,8 @@ extension WatchLoop {
             appFilename: movedApp?.lastPathComponent,
             micFilename: movedMic?.lastPathComponent,
             activeSpeakerIntervals: activeSpeakerIntervals,
+            liveTranscriptFilename: liveTranscriptFilename,
+            assistantConversationID: assistantConversationID,
         )
         try sidecar.write(toDirectory: destDir, basename: basename)
         do {

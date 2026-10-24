@@ -6,7 +6,7 @@
     private let logger = Logger(subsystem: AppPaths.logSubsystem, category: "ClaudeCLIProtocolGenerator")
 
     /// Claude CLI implementation that generates protocols via subprocess.
-    struct ClaudeCLIProtocolGenerator: ProtocolGenerating {
+    struct ClaudeCLIProtocolGenerator: ProtocolGenerating, AITextGenerating {
         let claudeBin: String
         let language: String
 
@@ -42,7 +42,16 @@
             diarized: Bool,
             meetingStartTime: Date?,
         ) async throws -> String {
-            let prompt = ProtocolGenerator.buildSystemPrompt(diarized: diarized, language: language, meetingStartTime: meetingStartTime) + transcript
+            let systemPrompt = ProtocolGenerator.buildSystemPrompt(
+                diarized: diarized,
+                language: language,
+                meetingStartTime: meetingStartTime,
+            )
+            return try await generateText(systemPrompt: systemPrompt, userPrompt: transcript)
+        }
+
+        func generateText(systemPrompt: String, userPrompt: String) async throws -> String {
+            let prompt = systemPrompt + "\n\n" + userPrompt
 
             let process = Process()
             let resolvedBin = Self.resolveClaudePath(claudeBin)

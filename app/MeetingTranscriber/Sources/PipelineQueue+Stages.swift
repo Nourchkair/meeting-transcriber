@@ -132,6 +132,7 @@ extension PipelineQueue {
             // Anchor the basename on the meeting start; reimport/orphan jobs
             // have no recorded start, so fall back to the enqueue time.
             slug: job.libraryRecordingID
+                ?? job.namingSlug
                 ?? namingSlug(title: job.meetingTitle, jobID: job.id, startTime: job.artifactStartTime),
         )
     }
@@ -919,6 +920,8 @@ extension PipelineQueue {
                 originalProtocolFilename: existing?.originalProtocolFilename,
                 audioIsEdited: existing?.audioIsEdited,
                 recordingSource: ctx.recordingSource ?? .inferred(appName: ctx.appName),
+                assistantConversationID: existing?.assistantConversationID
+                    ?? jobs.first(where: { $0.id == ctx.jobID })?.assistantConversationID,
             ).write(toDirectory: recordingsDir, basename: ctx.slug)
         } catch {
             logger.warning(

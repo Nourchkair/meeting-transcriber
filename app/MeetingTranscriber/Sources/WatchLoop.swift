@@ -69,6 +69,12 @@ class WatchLoop {
     /// `recordings/` subfolder. Calling start-access on a child URL silently
     /// fails inside the App Store sandbox — see `RecordOnlyDestination`.
     let recordOnlyDestination: () -> RecordOnlyDestination
+    /// Drains and returns the active recording's live transcript draft before
+    /// its audio is sent to the final transcription pipeline.
+    let finishLiveTranscript: (@MainActor (Date) async -> String?)?
+    /// Returns the conversation created for the recording currently being
+    /// finalized. Captured before asynchronous transcript flushing begins.
+    let currentAssistantConversationID: () -> UUID?
     /// Surface user-facing failures (e.g. sidecar write errors) that don't
     /// transition state to `.error`. Defaults to a silent no-op for tests.
     let notifier: any AppNotifying
@@ -133,6 +139,8 @@ class WatchLoop {
         recordOnlyDestination: @escaping () -> RecordOnlyDestination = {
             .unscoped(AppPaths.recordingsDir)
         },
+        finishLiveTranscript: (@MainActor (Date) async -> String?)? = nil,
+        currentAssistantConversationID: @escaping () -> UUID? = { nil },
         notifier: any AppNotifying = SilentNotifier(),
         nowProvider: @escaping () -> Date = Date.init,
         sleepProvider: @escaping (TimeInterval) async throws -> Void = { interval in
@@ -153,6 +161,8 @@ class WatchLoop {
         self.verboseDiagnostics = verboseDiagnostics
         self.recordOnly = recordOnly
         self.recordOnlyDestination = recordOnlyDestination
+        self.finishLiveTranscript = finishLiveTranscript
+        self.currentAssistantConversationID = currentAssistantConversationID
         self.notifier = notifier
         self.nowProvider = nowProvider
         self.sleepProvider = sleepProvider
@@ -525,7 +535,30 @@ class WatchLoop {
         participants: [String] = [],
         activeSpeakerIntervals: [ActiveSpeakerInterval]? = nil,
         bookmarks: [RecordingBookmark] = [],
+        liveTranscript: String? = nil,
+        captureLiveTranscript: Bool = true,
+        assistantConversationID: UUID? = nil,
     ) {
+        let assistantID = assistantConversationID ?? currentAssistantConversationID()
+        if captureLiveTranscript, let finishLiveTranscript {
+            Task { @MainActor [self] in
+                let draft = await finishLiveTranscript(recording.recordingStartDate)
+                enqueueRecording(
+                    title: title,
+                    appName: appName,
+                    recording: recording,
+                    trigger: trigger,
+                    participants: participants,
+                    activeSpeakerIntervals: activeSpeakerIntervals,
+                    bookmarks: bookmarks,
+                    liveTranscript: draft,
+                    captureLiveTranscript: false,
+                    assistantConversationID: assistantID,
+                )
+            }
+            return
+        }
+
         if recordOnly() {
             do {
                 try writeRecordOnlySidecar(
@@ -536,6 +569,8 @@ class WatchLoop {
                     participants: participants,
                     activeSpeakerIntervals: activeSpeakerIntervals,
                     bookmarks: bookmarks,
+                    liveTranscript: liveTranscript,
+                    assistantConversationID: assistantID,
                 )
             } catch {
                 // Error left redacted: a sidecar/WAV write error embeds the
@@ -569,6 +604,8 @@ class WatchLoop {
             activeSpeakerIntervals: activeSpeakerIntervals,
             bookmarks: bookmarks,
             meetingStartTime: recording.recordingStartDate,
+            assistantConversationID: assistantID,
+            liveTranscriptText: liveTranscript,
         )
         pipelineQueue?.enqueue(job)
         logger.info("Enqueued pipeline job for: \(title, privacy: .private)")

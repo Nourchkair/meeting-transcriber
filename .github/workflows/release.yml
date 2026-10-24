@@ -116,6 +116,7 @@ jobs:
 
       - name: Install Developer ID certificate
         id: dev-id
+        if: ${{ !(startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')) }}
         uses: ./.github/actions/install-developer-id
         with:
           cert: ${{ secrets.DEVELOPER_ID_CERT }}
@@ -139,12 +140,12 @@ jobs:
       # with the entitlement missing and the browser-consent prompt stays
       # suppressed under Focus for every user — the exact bug it fixes.
       # Absent secret: prepare_signing takes its no-profile path and this step
-      # still succeeds, so a contributor build is not blocked by it. On a
-      # RELEASE TAG it no longer ends there: the preflight in the build step
-      # below refuses outright, because a release without the entitlement is
-      # one where nobody with Focus on ever sees the consent prompt.
+      # still succeeds, so a contributor build is not blocked by it. Stable
+      # release tags are refused by the preflight below without the profile.
+      # Beta tags deliberately use the unsigned beta path and report this
+      # entitlement limitation to testers instead.
       - name: Install provisioning profile
-        if: matrix.variant == 'homebrew'
+        if: matrix.variant == 'homebrew' && !(startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-'))
         env:
           PROFILE_B64: ${{ secrets.RELEASE_PROVISIONING_PROFILE }}
         run: |
@@ -176,22 +177,28 @@ jobs:
           # profile from disk, where the step above installed it.
           RELEASE_PROVISIONING_PROFILE: ${{ secrets.RELEASE_PROVISIONING_PROFILE }}
         run: |
-          # Tag builds: use tag as version and staple notarization for offline Gatekeeper
+          BETA_FLAG=""
+          BETA_SIGNING_FLAG=""
+          # Tag builds: use tag as version. Stable releases are signed and
+          # notarized; beta releases use the explicit ad-hoc-signed beta path.
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             BUILD_VERSION="--version=${GITHUB_REF_NAME#v}"
             STAPLE_FLAG="--staple"
+            if [[ "${GITHUB_REF_NAME}" == *-* && "${{ matrix.variant }}" == "homebrew" ]]; then
+              BETA_FLAG="--beta-updates"
+              BETA_SIGNING_FLAG="--adhoc"
+            fi
           fi
-          # The gate decides, and this step has no opinion of its own. It used
-          # to branch on `[ -n "$DEVELOPER_ID" ]` right here, which meant a
-          # release tag built with that secret missing quietly took the
-          # unsigned path and still produced a DMG to attach. With the mode
-          # coming from the gate there is no second place for that decision to
-          # be made differently.
-          MODE="$(./scripts/release-signing-gate.sh preflight "$GITHUB_REF" "${{ matrix.variant }}")"
+          if [[ "$GITHUB_REF" == refs/tags/v* && "${GITHUB_REF_NAME}" == *-* && "${{ matrix.variant }}" == "homebrew" ]]; then
+            MODE="beta-adhoc"
+              echo "Building an ad-hoc-signed, unnotarized beta. Testers may need to allow Sawti in macOS Privacy & Security."
+          else
+            MODE="$(./scripts/release-signing-gate.sh preflight "$GITHUB_REF" "${{ matrix.variant }}")"
+          fi
           if [ "$MODE" = "developer-id" ] && [ "${{ matrix.variant }}" = "homebrew" ]; then
             ./scripts/build_release.sh $STAPLE_FLAG ${BUILD_VERSION:-}
           else
-            ./scripts/build_release.sh ${{ matrix.build-flags }} --no-notarize ${BUILD_VERSION:-}
+            ./scripts/build_release.sh ${{ matrix.build-flags }} --no-notarize $BETA_FLAG $BETA_SIGNING_FLAG ${BUILD_VERSION:-}
           fi
 
       # Assert on the SHIPPED signature, not on the profile: a profile that
@@ -208,7 +215,7 @@ jobs:
       # asks the built app and never the inputs, so there is no state in which
       # it can excuse itself.
       #
-      # On a release tag the entitlement is mandatory. Without it the app still
+      # On a stable release tag the entitlement is mandatory. Without it the app still
       # installs and runs, and then, for every user with Focus on, the
       # browser-meeting consent prompt never breaks through: it times out, that
       # counts as a decline, and no browser meeting is ever recorded while the
@@ -216,7 +223,7 @@ jobs:
       # same way. Off a release tag the entitlement is simply reported, since a
       # contributor has no profile and their build is attached to nothing.
       - name: Verify the release carries the time-sensitive entitlement
-        if: matrix.variant == 'homebrew'
+        if: matrix.variant == 'homebrew' && !(startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-'))
         run: |
           # shellcheck source=scripts/lib/signing.sh
           source scripts/lib/signing.sh
@@ -255,9 +262,15 @@ jobs:
       #
       # Not `codesign --verify`: measured, it exits 0 on an ad-hoc signed
       # bundle, so it would have passed the exact artifact this exists to stop.
-      - name: Verify the release is signed by a Developer ID
-        if: matrix.variant == 'homebrew' && startsWith(github.ref, 'refs/tags/v')
+      - name: Verify the stable release is signed by a Developer ID
+        if: matrix.variant == 'homebrew' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
         run: ./scripts/release-signing-gate.sh verify .build/release/MeetingTranscriber.app
+
+      - name: Report beta distribution limits
+        if: matrix.variant == 'homebrew' && startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')
+        run: |
+          echo "This beta is not notarized. macOS may require testers to use System Settings > Privacy & Security > Open Anyway after the first launch attempt."
+          echo "Without a provisioning profile, time-sensitive browser-consent notifications may not appear while Focus is enabled."
 
       - name: Get version
         id: version
@@ -297,6 +310,24 @@ jobs:
             --link "https://github.com/Nourchkair/Sawti/releases" \
             --maximum-versions 1 \
             "$UPDATE_DIR"
+          if [[ "$VERSION" == *-* ]]; then
+            python3 - "$UPDATE_DIR/appcast.xml" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          path = sys.argv[1]
+          sparkle = "http://www.andymatuschak.org/xml-namespaces/sparkle"
+          ET.register_namespace("sparkle", sparkle)
+          tree = ET.parse(path)
+          root = tree.getroot()
+          for item in root.findall("./channel/item"):
+              channel = item.find(f"{{{sparkle}}}channel")
+              if channel is None:
+                  channel = ET.SubElement(item, f"{{{sparkle}}}channel")
+              channel.text = "beta"
+          tree.write(path, encoding="utf-8", xml_declaration=True)
+          PY
+          fi
           cp "$UPDATE_DIR/appcast.xml" .build/release/appcast.xml
 
       - name: Compute DMG SHA256
@@ -351,23 +382,11 @@ jobs:
           generateReleaseNotesPreviousTag: ${{ steps.prev.outputs.tag }}
           prerelease: ${{ steps.version.outputs.prerelease }}
           body: |
-            ## MeetingTranscriber ${{ steps.version.outputs.version }}${{ steps.version.outputs.prerelease == 'true' && ' (Pre-release)' || '' }}
+            ## Sawti ${{ steps.version.outputs.version }}${{ steps.version.outputs.prerelease == 'true' && ' (Beta)' || '' }}
 
             ### Installation
 
-            **Via Homebrew (${{ steps.version.outputs.prerelease == 'true' && 'Beta channel' || 'recommended' }}):**
-            ```bash
-            brew tap pasrom/meeting-transcriber
-            brew install --cask ${{ steps.version.outputs.prerelease == 'true' && 'meeting-transcriber@beta' || 'meeting-transcriber' }}
-            ```
-
-            > Homebrew 6.0+ may flag the third-party tap as untrusted. If so, run `brew trust --tap pasrom/meeting-transcriber` before installing.
-
-            ${{ steps.version.outputs.prerelease == 'true' && '> Release candidate from the **beta channel**. The stable and beta casks conflict — uninstall one before installing the other.' || '' }}
-
-            **Manual:**
-            1. Download the DMG below
-            2. Mount it and drag MeetingTranscriber to Applications
+            ${{ steps.version.outputs.prerelease == 'true' && '**Beta testers:** Download the DMG below and move Sawti to Applications. On first launch, macOS may block the app; open System Settings > Privacy & Security > Open Anyway. Later beta and stable updates can be installed from Sawti.' || '**Stable release:** Install with Homebrew using `brew tap pasrom/meeting-transcriber` and `brew install --cask meeting-transcriber`, or download the DMG below and move Sawti to Applications.' }}
 
             ### SHA256
             ```
@@ -378,7 +397,7 @@ jobs:
       # otherwise `brew upgrade` silently keeps users on the prior version.
       - name: Update Homebrew tap with new version and SHA256
         id: tap-update
-        if: matrix.variant == 'homebrew' && startsWith(github.ref, 'refs/tags/v')
+        if: matrix.variant == 'homebrew' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
         env:
           GH_TOKEN: ${{ secrets.TAP_REPO_TOKEN }}
         run: |
@@ -388,9 +407,8 @@ jobs:
 
           DMG=".build/release/MeetingTranscriber-${VERSION}.dmg"
 
-          # Upload the DMG to the tap repo as well. Note the beta cask's url
-          # still points at the MAIN repo's release, so beta installs depend on
-          # that repo staying public — a mismatch worth normalising separately.
+          # Stable releases update the stable cask and carry forward the beta
+          # cask so existing Homebrew beta installs can move onto this release.
           PRERELEASE_FLAG=""
           [ "$PRERELEASE" = "true" ] && PRERELEASE_FLAG="--prerelease"
 
@@ -515,6 +533,38 @@ jobs:
             git commit -m "Update casks to v${VERSION}"
             git push
           fi
+
+      - name: Publish Sparkle beta feed
+        if: matrix.variant == 'homebrew' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          FEED_BRANCH="beta-feed"
+          SOURCE_APPCAST="${GITHUB_WORKSPACE}/.build/release/appcast.xml"
+          TEMP_APPCAST="${RUNNER_TEMP}/sawti-beta-feed-appcast.xml"
+          FEED_WORKTREE="${RUNNER_TEMP}/sawti-beta-feed-worktree"
+          cp "$SOURCE_APPCAST" "$TEMP_APPCAST"
+          gh auth setup-git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code origin "refs/heads/${FEED_BRANCH}" >/dev/null 2>&1; then
+            git fetch origin "refs/heads/${FEED_BRANCH}:refs/remotes/origin/${FEED_BRANCH}"
+            git worktree add -B "$FEED_BRANCH" "$FEED_WORKTREE" "origin/$FEED_BRANCH"
+            git -C "$FEED_WORKTREE" rm -rf .
+          else
+            git worktree add --detach "$FEED_WORKTREE" HEAD
+            git -C "$FEED_WORKTREE" switch --orphan "$FEED_BRANCH"
+            git -C "$FEED_WORKTREE" rm -rf . || true
+          fi
+          cp "$TEMP_APPCAST" "$FEED_WORKTREE/appcast.xml"
+          git -C "$FEED_WORKTREE" add -- appcast.xml
+          if ! git -C "$FEED_WORKTREE" diff --cached --quiet; then
+            git -C "$FEED_WORKTREE" commit -m "Publish Sawti update feed for beta users"
+          fi
+          git -C "$FEED_WORKTREE" push origin "HEAD:refs/heads/${FEED_BRANCH}"
+          git worktree remove "$FEED_WORKTREE" --force
+          echo "Published beta feed from ${GITHUB_REF_NAME}."
 
       - name: Cleanup keychain
         if: always() && steps.dev-id.outputs.keychain-path != ''

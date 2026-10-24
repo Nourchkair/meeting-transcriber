@@ -33,6 +33,9 @@ struct AboutSettingsView: View {
         .onChange(of: settings.checkForUpdates) { _, enabled in
             updateChecker?.setAutomaticChecksEnabled(enabled)
         }
+        .onChange(of: settings.includePreReleases) { _, enabled in
+            updateChecker?.setIncludePreReleases(enabled)
+        }
     }
 
     // swiftlint:disable:next force_unwrapping
@@ -62,15 +65,18 @@ struct AboutSettingsView: View {
     private func updatesSection(updateChecker: UpdateChecker) -> some View {
         // swiftlint:disable:next closure_body_length
         Section("Updates") {
-            Toggle("Check for Updates", isOn: $settings.checkForUpdates)
-                .help("When enabled, Sawti checks automatically and installs downloaded updates when the app can safely restart.")
+            Toggle("Automatic Updates", isOn: $settings.checkForUpdates)
 
-            Text("Sawti downloads updates in the background. It installs and relaunches after a safe quit, so you do not need to replace the app from a DMG.")
+            Text("Sawti checks for updates and downloads them in the background. Sparkle installs a downloaded update when you quit Sawti, then relaunches it. Updates pause while recording or processing audio. Use Check Now for a manual update.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            if settings.checkForUpdates {
+            if settings.checkForUpdates, !updateChecker.isPreReleaseBuild {
                 Toggle("Include Pre-Releases", isOn: $settings.includePreReleases)
+            } else if settings.checkForUpdates {
+                Text("This beta build checks the beta update feed automatically.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             HStack {

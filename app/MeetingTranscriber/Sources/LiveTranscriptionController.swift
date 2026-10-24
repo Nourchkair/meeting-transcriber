@@ -97,6 +97,10 @@ final class LiveTranscriptionController {
     /// `flush()`/`retireFeeds()`.
     private let micFeed = CaptionChannelFeed()
     private let appFeed = CaptionChannelFeed()
+    /// Final events are delivered through a synchronous, non-async sink, then
+    /// resolved on the main actor (including speaker matching). Keep those
+    /// tasks so the stop-time flush can wait until every final line is saved.
+    private let eventTasks = LiveCaptionEventTasks()
     /// True once `prepare()` resolved to a kept streaming session (German/English),
     /// which `prepareForNextRecording()` keeps instead of rebuilding.
     private var usingStreamingSession = false
@@ -314,6 +318,7 @@ final class LiveTranscriptionController {
             async let mic: Void? = self.micPipeline?.flush()
             async let app: Void? = self.appPipeline?.flush()
             _ = await (mic, app)
+            await self.eventTasks.waitForAll()
         }
         pendingFlush = task
         await task.value
@@ -435,8 +440,9 @@ final class LiveTranscriptionController {
         channel: LiveCaptionChannel,
         logChannel: String,
     ) -> StreamingTranscriber.EventSink {
-        { [weak self] event in
-            Task { @MainActor in
+        let eventTasks = self.eventTasks
+        return { [weak self, eventTasks] event in
+            let task = Task { @MainActor in
                 guard let self else { return }
                 switch event {
                 case let .partial(text):
@@ -450,15 +456,55 @@ final class LiveTranscriptionController {
                     self.captions.applyPartial(text, channel: channel)
 
                 case let .finalized(text, audio):
+                    let finalizedAt = Date()
                     if self.verboseDiagnostics() {
                         logger.info("[\(logChannel, privacy: .public)] final: \(text, privacy: .private)")
                     }
                     let matched = await self.speakerMatcher.match(audio: audio)
                     let speaker = matched ?? self.captions.label(for: channel)
-                    self.captions.applyFinalized(text, channel: channel, speaker: speaker)
+                    self.captions.applyFinalized(
+                        text,
+                        channel: channel,
+                        speaker: speaker,
+                        finalizedAt: finalizedAt,
+                    )
                 }
             }
+            eventTasks.append(task)
         }
+    }
+}
+
+/// Thread-safe registry for the main-actor tasks created by the live caption
+/// event sink. The pipeline calls that sink from its own actor, so registration
+/// must be synchronous before the sink returns; `flush()` then drains the exact
+/// set of tasks emitted by the final pipeline flush.
+private final class LiveCaptionEventTasks: @unchecked Sendable {
+    private let lock = NSLock()
+    private var tasks: [Task<Void, Never>] = []
+
+    func append(_ task: Task<Void, Never>) {
+        lock.lock()
+        tasks.append(task)
+        lock.unlock()
+    }
+
+    func waitForAll() async {
+        while true {
+            let pending = takePending()
+            guard !pending.isEmpty else { return }
+            for task in pending {
+                await task.value
+            }
+        }
+    }
+
+    private func takePending() -> [Task<Void, Never>] {
+        lock.lock()
+        defer { lock.unlock() }
+        let pending = tasks
+        tasks.removeAll(keepingCapacity: true)
+        return pending
     }
 }
 
