@@ -207,6 +207,9 @@ struct GitHubReleaseProvider: UpdateProviding {
         let url = URL(string: "https://api.github.com/repos/\(Self.owner)/\(Self.repo)/\(path)")!
         let (data, response) = try await URLSession.shared.data(for: URLRequest(url: url))
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            if path == "releases/latest", (response as? HTTPURLResponse)?.statusCode == 404 {
+                throw UpdateCheckerError.noStableRelease
+            }
             throw UpdateCheckerError.networkError(
                 "HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)",
             )
@@ -231,10 +234,12 @@ struct GitHubReleaseProvider: UpdateProviding {
 
 enum UpdateCheckerError: LocalizedError {
     case networkError(String)
+    case noStableRelease
 
     var errorDescription: String? {
         switch self {
         case let .networkError(detail): "Network error: \(detail)"
+        case .noStableRelease: "No stable Sawti release has been published yet. Update checks will work after the first release."
         }
     }
 }

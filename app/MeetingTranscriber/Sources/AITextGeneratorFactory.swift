@@ -11,6 +11,7 @@ enum AITextGeneratorFactory {
                 ClaudeCLIProtocolGenerator(
                     claudeBin: settings.claudeBin,
                     language: settings.protocolLanguage,
+                    thinkingEffort: settings.aiThinkingEffort,
                     anthropicAPIKey: settings.claudeAPIKey.isEmpty ? nil : settings.claudeAPIKey,
                 )
         #endif
@@ -22,6 +23,7 @@ enum AITextGeneratorFactory {
                     ?? URL(string: AppSettings.defaultOpenAIEndpoint)!,
                 model: settings.openAIModel,
                 language: settings.protocolLanguage,
+                thinkingEffort: settings.aiThinkingEffort,
                 apiKey: settings.openAIAPIKey.isEmpty ? nil : settings.openAIAPIKey,
             )
 
@@ -30,6 +32,7 @@ enum AITextGeneratorFactory {
                 model: settings.chatGPTPlanModel,
                 language: settings.protocolLanguage,
                 credentialStore: settings.chatGPTPlanCredentialStore,
+                thinkingEffort: settings.aiThinkingEffort,
             )
 
         case .none:

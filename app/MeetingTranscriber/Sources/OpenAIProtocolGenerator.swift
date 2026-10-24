@@ -9,6 +9,7 @@ struct OpenAIProtocolGenerator: ProtocolGenerating, AITextGenerating {
     let model: String
     let apiKey: String?
     let language: String
+    let thinkingEffort: AIThinkingEffort
     /// Idle timeout (`URLRequest.timeoutInterval`): max time *between* received
     /// bytes. Catches a fully-stalled connection, but does NOT bound total time —
     /// a slow-but-trickling stream resets it on every byte. See `maxTotalSeconds`.
@@ -39,6 +40,7 @@ struct OpenAIProtocolGenerator: ProtocolGenerating, AITextGenerating {
         endpoint: URL,
         model: String,
         language: String,
+        thinkingEffort: AIThinkingEffort = .automatic,
         apiKey: String? = nil,
         timeoutSeconds: TimeInterval = 600,
         maxTotalSeconds: TimeInterval = 1800,
@@ -48,6 +50,7 @@ struct OpenAIProtocolGenerator: ProtocolGenerating, AITextGenerating {
         self.endpoint = endpoint
         self.model = model
         self.language = language
+        self.thinkingEffort = thinkingEffort
         self.apiKey = apiKey
         self.timeoutSeconds = timeoutSeconds
         self.maxTotalSeconds = maxTotalSeconds
@@ -128,12 +131,20 @@ struct OpenAIProtocolGenerator: ProtocolGenerating, AITextGenerating {
     private func send(
         messages: [[String: Any]], tokenLimit: TokenLimitParameter,
     ) async throws -> String {
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": model,
             "messages": messages,
             "stream": true,
             tokenLimit.rawValue: maxOutputTokens,
         ]
+        if let effort = AIThinkingEffort.requestValue(
+            for: thinkingEffort,
+            model: model,
+            provider: .openAICompatible,
+            endpoint: endpoint,
+        ) {
+            body["reasoning_effort"] = effort
+        }
 
         let bodyData = try JSONSerialization.data(withJSONObject: body)
 

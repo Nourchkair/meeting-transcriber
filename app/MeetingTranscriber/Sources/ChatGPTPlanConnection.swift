@@ -636,6 +636,7 @@ enum ChatGPTPlanOAuth {
 struct ChatGPTPlanResponsesGenerator: ProtocolGenerating, AITextGenerating {
     let model: String
     let language: String
+    let thinkingEffort: AIThinkingEffort
     let credentialStore: ChatGPTPlanCredentialStore
     let session: URLSession
 
@@ -643,10 +644,12 @@ struct ChatGPTPlanResponsesGenerator: ProtocolGenerating, AITextGenerating {
         model: String,
         language: String,
         credentialStore: ChatGPTPlanCredentialStore,
+        thinkingEffort: AIThinkingEffort = .automatic,
         session: URLSession = .shared,
     ) {
         self.model = model
         self.language = language
+        self.thinkingEffort = thinkingEffort
         self.credentialStore = credentialStore
         self.session = session
     }
@@ -687,13 +690,20 @@ struct ChatGPTPlanResponsesGenerator: ProtocolGenerating, AITextGenerating {
         } else {
             [["type": "input_text", "text": userPrompt]]
         }
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": model,
             "instructions": systemPrompt,
             "input": [["role": "user", "content": inputContent]],
             "store": false,
             "stream": true,
         ]
+        if let effort = AIThinkingEffort.requestValue(
+            for: thinkingEffort,
+            model: model,
+            provider: .chatGPTPlan,
+        ) {
+            body["reasoning"] = ["effort": effort]
+        }
         let bodyData = try JSONSerialization.data(withJSONObject: body)
         guard let endpoint = URL(string: "https://api.openai.com/v1/responses") else {
             throw ChatGPTPlanError.inferenceFailed("The Responses API address is invalid.")

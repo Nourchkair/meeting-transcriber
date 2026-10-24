@@ -100,6 +100,8 @@ struct OutputSettingsView: View {
 
                 providerConfigView
 
+                thinkingEffortControls
+
                 Picker("Notes language", selection: $settings.protocolLanguage) {
                     ForEach(AppSettings.protocolLanguages, id: \.self) { lang in
                         Text(lang).tag(lang)
@@ -273,6 +275,57 @@ struct OutputSettingsView: View {
                 Label("Using default prompt", systemImage: "doc.text")
                     .foregroundStyle(.secondary)
                     .font(.caption)
+            }
+        }
+    }
+
+    @ViewBuilder private var thinkingEffortControls: some View {
+        let endpoint = URL(string: settings.openAIEndpoint)
+        let model = settings.protocolProvider == .chatGPTPlan
+            ? settings.chatGPTPlanModel
+            : settings.openAIModel
+        let options = AIThinkingEffort.supportedOptions(
+            provider: settings.protocolProvider,
+            model: model,
+            endpoint: endpoint,
+        )
+
+        if options.count > 1 {
+            Picker("Thinking level", selection: $settings.aiThinkingEffort) {
+                ForEach(options) { option in
+                    Text(option.label).tag(option)
+                }
+            }
+            Text("This choice is shared by AI notes and the live assistant. Automatic uses the provider's default. Available levels depend on the model.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            switch settings.protocolProvider {
+            #if !APPSTORE
+                case .claudeCLI:
+                    Text(
+                        "Claude Code supports per-request effort levels. "
+                            + "Availability depends on the model; Sawti applies the selected level to AI notes and the live assistant.",
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            #endif
+
+            case .openAICompatible:
+                Text(
+                    "A thinking level is available for supported reasoning models using the official OpenAI API. "
+                        + "Local and other compatible servers may use different controls.",
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            case .chatGPTPlan:
+                Text("The selected ChatGPT model does not expose a configurable thinking level.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+            case .none:
+                EmptyView()
             }
         }
     }

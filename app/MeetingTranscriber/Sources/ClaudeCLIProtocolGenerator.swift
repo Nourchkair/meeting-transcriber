@@ -9,6 +9,7 @@
     struct ClaudeCLIProtocolGenerator: ProtocolGenerating, AITextGenerating {
         let claudeBin: String
         let language: String
+        let thinkingEffort: AIThinkingEffort
 
         /// User-supplied key from Settings → Files & Notes → Meeting Notes (`AppSettings.claudeAPIKey`),
         /// injected only when the user has explicitly typed one in. Not
@@ -18,9 +19,15 @@
         /// previously-working install (both measured — see PR #692 review).
         let anthropicAPIKey: String?
 
-        init(claudeBin: String, language: String, anthropicAPIKey: String? = nil) {
+        init(
+            claudeBin: String,
+            language: String,
+            thinkingEffort: AIThinkingEffort = .automatic,
+            anthropicAPIKey: String? = nil,
+        ) {
             self.claudeBin = claudeBin
             self.language = language
+            self.thinkingEffort = thinkingEffort
             self.anthropicAPIKey = anthropicAPIKey
         }
 
@@ -56,7 +63,7 @@
             let process = Process()
             let resolvedBin = Self.resolveClaudePath(claudeBin)
             process.executableURL = URL(fileURLWithPath: resolvedBin)
-            process.arguments = Self.buildSubprocessArgs(claudeBin: claudeBin, resolvedBin: resolvedBin)
+            process.arguments = Self.buildSubprocessArgs(claudeBin: claudeBin, resolvedBin: resolvedBin, thinkingEffort: thinkingEffort)
             process.environment = Self.buildEnvironment(
                 baseEnvironment: ProcessInfo.processInfo.environment,
                 searchPaths: Self.searchPaths,
@@ -419,8 +426,19 @@
         /// Build the CLI argument vector. When `resolvedBin` is the
         /// `/usr/bin/env` fallback, prepend `claudeBin` so env can resolve
         /// it from PATH.
-        static func buildSubprocessArgs(claudeBin: String, resolvedBin: String) -> [String] {
+        static func buildSubprocessArgs(
+            claudeBin: String,
+            resolvedBin: String,
+            thinkingEffort: AIThinkingEffort = .automatic,
+        ) -> [String] {
             var args = ["-p", "-", "--output-format", "stream-json", "--verbose", "--model", "sonnet"]
+            if let effort = AIThinkingEffort.requestValue(
+                for: thinkingEffort,
+                model: "sonnet",
+                provider: .claudeCLI,
+            ) {
+                args += ["--effort", effort]
+            }
             if resolvedBin == "/usr/bin/env" {
                 args.insert(claudeBin, at: 0)
             }
