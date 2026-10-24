@@ -506,6 +506,11 @@ final class AppSettings {
         didSet { defaults.set(protocolProvider.rawValue, forKey: "protocolProvider") }
     }
 
+    /// Shared effort level used by every AI feature when its provider/model supports it.
+    var aiThinkingEffort: AIThinkingEffort {
+        didSet { defaults.set(aiThinkingEffort.rawValue, forKey: "aiThinkingEffort") }
+    }
+
     /// Explicit opt-in for automatic post-recording AI requests. Selecting or
     /// connecting a provider alone does not send recording transcripts.
     var aiNotesEnabled: Bool {
@@ -757,6 +762,8 @@ final class AppSettings {
             claudeBin = defaults.object(forKey: "claudeBin") as? String ?? "claude"
         #endif
         protocolLanguage = defaults.string(forKey: "protocolLanguage") ?? "English"
+        aiThinkingEffort = defaults.string(forKey: "aiThinkingEffort")
+            .flatMap(AIThinkingEffort.init(rawValue:)) ?? .automatic
         aiNotesEnabled = defaults.object(forKey: "aiNotesEnabled") as? Bool ?? false
         hideSawtiFromScreenSharing = defaults.object(forKey: "hideSawtiFromScreenSharing") as? Bool ?? true
         continuousScreenAwarenessEnabled = defaults.object(forKey: "continuousScreenAwarenessEnabled") as? Bool ?? false
