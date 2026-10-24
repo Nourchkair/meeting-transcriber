@@ -6,7 +6,9 @@ enum RecordingAudioEditSaveMode: String, CaseIterable, Identifiable {
     case replaceOriginal
     case separateRecordings
 
-    var id: Self { self }
+    var id: Self {
+        self
+    }
 
     var label: String {
         switch self {

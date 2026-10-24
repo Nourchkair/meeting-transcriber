@@ -1,5 +1,5 @@
-import AVFoundation
 import AppKit
+import AVFoundation
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -20,9 +20,11 @@ struct EngineComparisonView: View {
 
     var body: some View {
         Section("Engine Comparison") {
-            Text("Compare both engines on the same recording and a human-corrected reference containing only spoken words (no timestamps or speaker names). Use the same supported language for both. Sawti unloads each model before loading the next, then reloads your selected engine. The first run may download a model.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text(
+                "Compare both engines on the same recording and a human-corrected reference containing only spoken words (no timestamps or speaker names). Use the same supported language for both. Sawti unloads each model before loading the next, then reloads your selected engine. The first run may download a model.",
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
 
             HStack {
                 Button(audioURL?.lastPathComponent ?? "Choose Audio…") { chooseAudio() }
@@ -48,8 +50,12 @@ struct EngineComparisonView: View {
             ForEach(results) { result in
                 VStack(alignment: .leading, spacing: 5) {
                     Text(result.engine).font(.headline)
-                    Text("Load: \(result.loadSeconds.formatted(.number.precision(.fractionLength(1)))) s\(result.modelWasWarm ? " (loaded before test)" : "")  ·  Transcribe: \(result.transcriptionSeconds.formatted(.number.precision(.fractionLength(1)))) s  ·  RTF: \(result.realTimeFactor.formatted(.number.precision(.fractionLength(2))))")
-                    Text("WER \(result.wer.formatted(.percent.precision(.fractionLength(1))))  ·  CER \(result.cer.formatted(.percent.precision(.fractionLength(1))))  ·  Thermal state: \(result.thermalState)")
+                    Text(
+                        "Load: \(result.loadSeconds.formatted(.number.precision(.fractionLength(1)))) s\(result.modelWasWarm ? " (loaded before test)" : "")  ·  Transcribe: \(result.transcriptionSeconds.formatted(.number.precision(.fractionLength(1)))) s  ·  RTF: \(result.realTimeFactor.formatted(.number.precision(.fractionLength(2))))",
+                    )
+                    Text(
+                        "WER \(result.wer.formatted(.percent.precision(.fractionLength(1))))  ·  CER \(result.cer.formatted(.percent.precision(.fractionLength(1))))  ·  Thermal state: \(result.thermalState)",
+                    )
                     Text(result.transcript)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -204,7 +210,7 @@ struct EngineComparisonView: View {
         let referenceUnits = units(reference, characterLevel: characterLevel)
         let hypothesisUnits = units(hypothesis, characterLevel: characterLevel)
         guard !referenceUnits.isEmpty else { return 0 }
-        var previous = Array(0...hypothesisUnits.count)
+        var previous = Array(0 ... hypothesisUnits.count)
         for (referenceIndex, referenceUnit) in referenceUnits.enumerated() {
             var current = [referenceIndex + 1] + Array(repeating: 0, count: hypothesisUnits.count)
             for (hypothesisIndex, hypothesisUnit) in hypothesisUnits.enumerated() {

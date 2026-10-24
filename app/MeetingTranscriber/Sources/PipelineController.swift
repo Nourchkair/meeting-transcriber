@@ -428,11 +428,10 @@ final class PipelineController {
             let appName = sidecar?.appName ?? libraryMetadata?.appName ?? "File"
             let micDelay = sidecar?.micDelaySeconds ?? 0
             let participants = sidecar?.participants ?? libraryMetadata?.participants ?? []
-            let recordingSource: RecordingSourceKind
-            if let sidecar {
-                recordingSource = .captured(trigger: sidecar.trigger, appName: sidecar.appName)
+            let recordingSource: RecordingSourceKind = if let sidecar {
+                .captured(trigger: sidecar.trigger, appName: sidecar.appName)
             } else {
-                recordingSource = libraryMetadata?.recordingSource ?? .inferred(appName: appName)
+                libraryMetadata?.recordingSource ?? .inferred(appName: appName)
             }
 
             // For paired groups: pass `group.mix` directly (nil when only app+mic

@@ -29,7 +29,9 @@ struct RecordingEditedAudio: Codable, Identifiable, Equatable, Sendable {
     let endOffset: TimeInterval
     let createdAt: Date
 
-    var duration: TimeInterval { max(0, endOffset - startOffset) }
+    var duration: TimeInterval {
+        max(0, endOffset - startOffset)
+    }
 
     init(
         id: UUID = UUID(),

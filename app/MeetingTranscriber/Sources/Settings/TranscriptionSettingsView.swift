@@ -85,10 +85,12 @@ struct TranscriptionSettingsView: View {
             if settings.whisperLanguageAllowlistEnabled {
                 whisperPrimaryLanguagePicker
                 whisperAdditionalLanguagesPicker
-                Text("Whisper checks languages in about 20-second windows and prefers the primary language when scores are close. Short language switches inside one window or noisy speech can still be misrecognized.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "Whisper checks languages in about 20-second windows and prefers the primary language when scores are close. Short language switches inside one window or noisy speech can still be misrecognized.",
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             } else {
                 Picker("Language", selection: $settings.whisperLanguage) {
                     ForEach(PickerLanguages.whisperKit, id: \.code) { lang in

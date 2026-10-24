@@ -97,11 +97,10 @@ final class EngineController {
             whisperKit.applyModelVariant(settings.whisperKitModel)
             let allowlist = settings.whisperLanguageAllowlist
             whisperKit.languageAllowlist = allowlist
-            let next: String?
-            if let allowlist {
-                next = allowlist.count == 1 ? allowlist[0] : nil
+            let next: String? = if let allowlist {
+                allowlist.count == 1 ? allowlist[0] : nil
             } else {
-                next = settings.whisperLanguageOrNil
+                settings.whisperLanguageOrNil
             }
             if whisperKit.language != next { whisperKit.language = next }
             let nextVocab = settings.customVocabularyPath

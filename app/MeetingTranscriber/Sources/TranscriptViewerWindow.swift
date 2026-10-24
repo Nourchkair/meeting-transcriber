@@ -158,7 +158,7 @@ struct TranscriptViewerWindow: View {
                         .font(.caption.monospacedDigit())
                     Slider(
                         value: Binding(get: { playback.currentTime }, set: { playback.seek(to: $0) }),
-                        in: 0...max(1, playback.duration),
+                        in: 0 ... max(1, playback.duration),
                     )
                     .disabled(playback.duration == 0)
                     Text(playback.duration.formatted(.number.precision(.fractionLength(0))))
@@ -238,7 +238,9 @@ struct TranscriptViewerWindow: View {
         )
     }
 
-    private var hasUnsavedChanges: Bool { isDirty }
+    private var hasUnsavedChanges: Bool {
+        isDirty
+    }
 
     private func moveSearch(by delta: Int) {
         guard !matchingLineIDs.isEmpty else { return }
@@ -346,20 +348,27 @@ private struct TranscriptDisplayLine: Identifiable {
         }
     }
 
-    var timestampLabel: String { prefix }
-    var displayText: String { prefix.isEmpty ? body : body }
-    var serializedText: String { prefix.isEmpty ? body : "\(prefix) \(body)" }
+    var timestampLabel: String {
+        prefix
+    }
+
+    var displayText: String {
+        prefix.isEmpty ? body : body
+    }
+
+    var serializedText: String {
+        prefix.isEmpty ? body : "\(prefix) \(body)"
+    }
 
     private static func parse(_ line: String) -> (prefix: String, body: String, seconds: TimeInterval)? {
         guard line.first == "[", let close = line.firstIndex(of: "]") else { return nil }
-        let stamp = String(line[line.index(after: line.startIndex)..<close])
+        let stamp = String(line[line.index(after: line.startIndex) ..< close])
         let pieces = stamp.split(separator: ":").compactMap { Int($0) }
         guard pieces.count == 2 || pieces.count == 3 else { return nil }
-        let seconds: Int
-        if pieces.count == 3 {
-            seconds = pieces[0] * 3600 + pieces[1] * 60 + pieces[2]
+        let seconds: Int = if pieces.count == 3 {
+            pieces[0] * 3600 + pieces[1] * 60 + pieces[2]
         } else {
-            seconds = pieces[0] * 60 + pieces[1]
+            pieces[0] * 60 + pieces[1]
         }
         let bodyStart = line.index(after: close)
         let content = String(line[bodyStart...]).trimmingCharacters(in: .whitespaces)

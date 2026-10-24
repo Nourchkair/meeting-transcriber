@@ -40,7 +40,7 @@ struct ChatGPTPlanCredentials: Codable, Sendable {
     func encode() throws -> String {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        return String(decoding: try encoder.encode(self), as: UTF8.self)
+        return try String(decoding: encoder.encode(self), as: UTF8.self)
     }
 }
 
@@ -58,7 +58,9 @@ struct ChatGPTPlanModel: Decodable, Hashable, Identifiable, Sendable {
     let displayName: String
     let visibility: String
 
-    var id: String { slug }
+    var id: String {
+        slug
+    }
 
     enum CodingKeys: String, CodingKey {
         case slug
@@ -520,7 +522,7 @@ enum ChatGPTPlanOAuth {
             var length = contents.count
             var encoded = [UInt8]()
             while length > 0 {
-                encoded.insert(UInt8(length & 0xff), at: 0)
+                encoded.insert(UInt8(length & 0xFF), at: 0)
                 length >>= 8
             }
             output.append(0x80 | UInt8(encoded.count))
@@ -587,7 +589,7 @@ enum ChatGPTPlanOAuth {
             if let single = try? container.decode(String.self) {
                 self = .single(single)
             } else {
-                self = .multiple(try container.decode([String].self))
+                self = try .multiple(container.decode([String].self))
             }
         }
     }
@@ -667,13 +669,14 @@ struct ChatGPTPlanResponsesGenerator: ProtocolGenerating, AITextGenerating {
         try await generateText(systemPrompt: systemPrompt, userPrompt: userPrompt, imageData: nil)
     }
 
-    var supportsImageInput: Bool { true }
+    var supportsImageInput: Bool {
+        true
+    }
 
     func generateText(systemPrompt: String, userPrompt: String, imageData: Data?) async throws -> String {
         let credentials = try await credentialStore.validCredentials()
-        let inputContent: [[String: Any]]
-        if let imageData {
-            inputContent = [
+        let inputContent: [[String: Any]] = if let imageData {
+            [
                 ["type": "input_text", "text": userPrompt],
                 [
                     "type": "input_image",
@@ -682,7 +685,7 @@ struct ChatGPTPlanResponsesGenerator: ProtocolGenerating, AITextGenerating {
                 ],
             ]
         } else {
-            inputContent = [["type": "input_text", "text": userPrompt]]
+            [["type": "input_text", "text": userPrompt]]
         }
         let body: [String: Any] = [
             "model": model,
@@ -792,7 +795,9 @@ private final class LoopbackCallbackServer: @unchecked Sendable {
     }
 
     func waitForCallback() async throws -> URL {
-        for await callback in callbacks { return callback }
+        for await callback in callbacks {
+            return callback
+        }
         throw ChatGPTPlanError.callbackInvalid
     }
 
@@ -812,7 +817,7 @@ private final class LoopbackCallbackServer: @unchecked Sendable {
 
     private func handle(_ connection: NWConnection) {
         connection.start(queue: DispatchQueue(label: "com.sawti.chatgpt-callback"))
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { [weak self] data, _, _, _ in
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, _, _ in
             guard let self,
                   let data,
                   let request = String(data: data, encoding: .utf8),
@@ -835,7 +840,8 @@ private final class LoopbackCallbackServer: @unchecked Sendable {
 
     private func reply(_ connection: NWConnection, status: String, message: String) {
         let html = "<!doctype html><meta charset=utf-8><title>Sawti</title><p>\(message)</p>"
-        let data = Data("HTTP/1.1 \(status)\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\nContent-Length: \(html.utf8.count)\r\n\r\n\(html)".utf8)
+        let data = Data("HTTP/1.1 \(status)\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\nContent-Length: \(html.utf8.count)\r\n\r\n\(html)"
+            .utf8)
         connection.send(content: data, completion: .contentProcessed { _ in connection.cancel() })
     }
 }

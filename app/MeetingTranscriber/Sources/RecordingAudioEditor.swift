@@ -25,7 +25,7 @@ struct RecordingAudioEditorSheet: View {
     private var mainRange: ClosedRange<TimeInterval> {
         let visibleDuration = min(duration, zoomWindowDuration)
         let start = min(max(0, zoomCenter - visibleDuration / 2), max(0, duration - visibleDuration))
-        return start...(start + visibleDuration)
+        return start ... (start + visibleDuration)
     }
 
     private var validTrim: Bool {
@@ -140,7 +140,7 @@ struct RecordingAudioEditorSheet: View {
             AudioTrimTimeline(
                 peaks: waveform,
                 duration: duration,
-                visibleRange: 0...duration,
+                visibleRange: 0 ... duration,
                 viewportCenter: zoomCenter,
                 viewportDuration: zoomWindowDuration,
                 trimStart: startOffset,
@@ -443,7 +443,7 @@ struct RecordingAudioEditorSheet: View {
 
     private func clock(_ time: TimeInterval) -> String {
         let hundredths = max(0, Int((time * 100).rounded()))
-        let minutes = hundredths / 6_000
+        let minutes = hundredths / 6000
         let seconds = (hundredths / 100) % 60
         let fraction = hundredths % 100
         return String(format: "%02d:%02d.%02d", minutes, seconds, fraction)
@@ -529,13 +529,13 @@ private struct AudioTrimTimeline: View {
         let maxHeight = size.height * (isOverview ? 0.68 : 0.72)
         let barWidth = max(1, barStep * 0.54)
 
-        for bar in 0..<barCount {
+        for bar in 0 ..< barCount {
             let first = startIndex + bar * visibleCount / barCount
             let after = max(first + 1, startIndex + (bar + 1) * visibleCount / barCount)
             let last = min(endIndex, after)
             var peak: Float = 0
             if first < peaks.count {
-                for index in first..<last where index < peaks.count {
+                for index in first ..< last where index < peaks.count {
                     peak = max(peak, peaks[index])
                 }
             }
@@ -622,7 +622,7 @@ private struct AudioTrimTimeline: View {
         return .playhead
     }
 
-    private func updateDrag(location: CGFloat, startLocation: CGFloat, translation: CGFloat, width: CGFloat) {
+    private func updateDrag(location: CGFloat, startLocation _: CGFloat, translation: CGFloat, width: CGFloat) {
         guard let dragTarget else { return }
         let range = dragRange ?? visibleRange
         let time = timeAt(location: location, width: width, in: range)
@@ -782,7 +782,7 @@ private enum RecordingWaveformReader {
             track: track,
             outputSettings: [
                 AVFormatIDKey: kAudioFormatLinearPCM,
-                AVSampleRateKey: 8_000,
+                AVSampleRateKey: 8000,
                 AVNumberOfChannelsKey: 1,
                 AVLinearPCMBitDepthKey: 32,
                 AVLinearPCMIsFloatKey: true,
@@ -796,7 +796,7 @@ private enum RecordingWaveformReader {
             throw reader.error ?? RecordingAudioEditorError.waveformFailed
         }
 
-        let estimatedFrames = max(1, Int((duration * 8_000).rounded()))
+        let estimatedFrames = max(1, Int((duration * 8000).rounded()))
         let peakCount = min(500_000, max(64, Int((duration * 64).rounded(.up))))
         let framesPerPeak = max(1, Int(ceil(Double(estimatedFrames) / Double(peakCount))))
         var peaks = Array(repeating: Float.zero, count: peakCount)

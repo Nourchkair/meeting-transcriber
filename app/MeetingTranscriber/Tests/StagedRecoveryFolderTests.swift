@@ -41,7 +41,7 @@ final class StagedRecoveryFolderTests: XCTestCase {
         var remixed = false
         var recoveredJob = false
         let deadline = ContinuousClock.now + .seconds(5)
-        while (!remixed || !recoveredJob), ContinuousClock.now < deadline {
+        while !remixed || !recoveredJob, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(10))
             remixed = FileManager.default.fileExists(atPath: recoveredMix.path)
             recoveredJob = queue.jobs.contains { $0.mixPath?.standardizedFileURL == recoveredMix.standardizedFileURL }

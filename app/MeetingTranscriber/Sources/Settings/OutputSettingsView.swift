@@ -89,7 +89,7 @@ struct OutputSettingsView: View {
 
                 Toggle("Include full transcript in notes", isOn: $settings.includeFullTranscriptInProtocol)
                     .accessibilityIdentifier(A11yID.includeFullTranscriptToggle)
-                    Toggle("Save original transcript separately", isOn: $settings.saveRawTranscriptSeparately)
+                Toggle("Save original transcript separately", isOn: $settings.saveRawTranscriptSeparately)
                     .accessibilityIdentifier(A11yID.saveRawTranscriptToggle)
 
                 Picker("AI connection", selection: $settings.protocolProvider) {
@@ -167,9 +167,11 @@ struct OutputSettingsView: View {
             Text("Endpoint")
             TextField("http://localhost:1234/v1", text: $settings.openAIEndpoint)
                 .textFieldStyle(.roundedBorder)
-            Text("Use an OpenAI API endpoint or a local OpenAI-compatible server such as Ollama or LM Studio. Hosted API usage is billed separately from a ChatGPT subscription.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text(
+                "Use an OpenAI API endpoint or a local OpenAI-compatible server such as Ollama or LM Studio. Hosted API usage is billed separately from a ChatGPT subscription.",
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
 
         if !availableModels.isEmpty {

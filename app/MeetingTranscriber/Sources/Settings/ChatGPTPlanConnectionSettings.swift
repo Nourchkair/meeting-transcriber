@@ -26,9 +26,11 @@ struct ChatGPTPlanConnectionSettings: View {
             Text("Sawti sends AI requests through the official Responses API. This does not give Sawti access to your ChatGPT conversations.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("Requests count toward the usage and limits of your ChatGPT plan, shared with other apps. You can review or revoke Sawti’s access in ChatGPT settings.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text(
+                "Requests count toward the usage and limits of your ChatGPT plan, shared with other apps. You can review or revoke Sawti’s access in ChatGPT settings.",
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
             if let usageSettingsURL = Self.usageSettingsURL {
                 Link("Review ChatGPT usage", destination: usageSettingsURL)
                     .font(.caption)
@@ -50,7 +52,9 @@ struct ChatGPTPlanConnectionSettings: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Sawti will revoke the renewable sign-in session when possible and remove its local access tokens. Your approved Sawti registration is retained so you can reconnect more easily.")
+            Text(
+                "Sawti will revoke the renewable sign-in session when possible and remove its local access tokens. Your approved Sawti registration is retained so you can reconnect more easily.",
+            )
         }
     }
 

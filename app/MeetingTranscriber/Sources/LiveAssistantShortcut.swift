@@ -72,7 +72,7 @@ final class LiveAssistantShortcutMonitor {
         }
         guard modifiers & (Int(cmdKey) | Int(optionKey) | Int(controlKey)) != 0 else { return false }
 
-        let identifier = EventHotKeyID(signature: OSType(0x53575449), id: 1)
+        let identifier = EventHotKeyID(signature: OSType(0x5357_5449), id: 1)
         var registered: EventHotKeyRef?
         let status = RegisterEventHotKey(
             UInt32(keyCode),
@@ -130,7 +130,9 @@ final class AssistantShortcutCaptureView: NSView {
     var statusLabel = ""
     private var isCapturing = false
 
-    override var acceptsFirstResponder: Bool { true }
+    override var acceptsFirstResponder: Bool {
+        true
+    }
 
     override func mouseDown(with event: NSEvent) {
         _ = event

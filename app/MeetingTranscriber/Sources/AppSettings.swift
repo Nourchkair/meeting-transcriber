@@ -94,6 +94,7 @@ enum ProtocolProvider: String, CaseIterable {
         #endif
 
         case .openAICompatible: "OpenAI API or local model"
+
         case .chatGPTPlan: "ChatGPT subscription"
 
         case .none: "None (Transcript Only)"
@@ -108,7 +109,9 @@ enum WatchSessionDuration: String, CaseIterable, Identifiable {
     case fourHours
     case eightHours
 
-    var id: Self { self }
+    var id: Self {
+        self
+    }
 
     var label: String {
         switch self {

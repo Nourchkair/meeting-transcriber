@@ -70,10 +70,12 @@ struct LiveAssistantWindow: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
-                Text("Screen awareness samples the main display every 3 seconds while recording when enabled. Sawti keeps only the latest frame on your Mac and sends it only with your question.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Screen awareness samples the main display every 3 seconds while recording when enabled. Sawti keeps only the latest frame on your Mac and sends it only with your question.",
+            )
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
     }
@@ -113,9 +115,11 @@ struct LiveAssistantWindow: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Ask about the conversation or what’s on screen.")
                 .font(.headline)
-            Text("Sawti uses finalized live-caption lines as meeting context. Turn on Screen awareness for an updated screen sample during a recording, or capture the screen once for help with a slide, document, chart, or error message.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            Text(
+                "Sawti uses finalized live-caption lines as meeting context. Turn on Screen awareness for an updated screen sample during a recording, or capture the screen once for help with a slide, document, chart, or error message.",
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
             if !assistant.hasLiveTranscript {
                 Text("Start a meeting recording with live transcription enabled to give Sawti conversation context.")
                     .font(.caption)

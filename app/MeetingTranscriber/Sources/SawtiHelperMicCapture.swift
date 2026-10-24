@@ -148,13 +148,33 @@ final class SawtiHelperMicCapture: AudioCapturing {
         self.helperURL = helperURL
     }
 
-    var appLevelDBFS: Double { -120 }
-    var micLevelDBFS: Double { eventReader?.health.levelDBFS ?? -120 }
-    var appCaptureGaveUp: Bool { false }
-    var micCaptureGaveUp: Bool { helperFailedToStop || (eventReader?.health.gaveUp ?? false) }
-    var appSilentTrackWatchdogGaveUp: Bool { false }
-    var appSignalAges: ChannelSignalAges { .unknown }
-    var micSignalAges: ChannelSignalAges { eventReader?.health.ages ?? .unknown }
+    var appLevelDBFS: Double {
+        -120
+    }
+
+    var micLevelDBFS: Double {
+        eventReader?.health.levelDBFS ?? -120
+    }
+
+    var appCaptureGaveUp: Bool {
+        false
+    }
+
+    var micCaptureGaveUp: Bool {
+        helperFailedToStop || (eventReader?.health.gaveUp ?? false)
+    }
+
+    var appSilentTrackWatchdogGaveUp: Bool {
+        false
+    }
+
+    var appSignalAges: ChannelSignalAges {
+        .unknown
+    }
+
+    var micSignalAges: ChannelSignalAges {
+        eventReader?.health.ages ?? .unknown
+    }
 
     func start() throws {
         guard configuration.appOutputURL == nil,

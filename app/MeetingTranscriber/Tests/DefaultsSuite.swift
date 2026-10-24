@@ -99,7 +99,9 @@ enum DefaultsSuite {
             Self.removeDomain(named: domainName)
         }
 
-        override func synchronize() -> Bool { true }
+        override func synchronize() -> Bool {
+            true
+        }
 
         static func removeDomain(named name: String) {
             lock.lock()
