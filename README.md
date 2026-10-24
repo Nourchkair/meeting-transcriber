@@ -47,3 +47,5 @@ Sawti does not import or migrate data from an installed Meeting Transcriber app.
 - AcademiaOS integration is deferred until Sawti is dependable as an independent application.
 
 See [`docs/OPTIMIZATION_BACKLOG.md`](docs/OPTIMIZATION_BACKLOG.md) for planned product improvements and release-qualification work, [`docs/validation/VALIDATION.md`](docs/validation/VALIDATION.md) for evidence and pending checks, and [`docs/CAPABILITY_REGISTER.md`](docs/CAPABILITY_REGISTER.md) for the disposition of inherited features. The repository retains the upstream MIT license and notices.
+
+For beta release publishing, first-install instructions, and Sparkle updates, see [`docs/BETA_DISTRIBUTION.md`](docs/BETA_DISTRIBUTION.md).

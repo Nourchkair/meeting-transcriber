@@ -484,6 +484,32 @@ class PipelineQueue {
     func enqueue(_ inputJob: PipelineJob) {
         var job = inputJob
         stampTranscriptOutputOptions(on: &job)
+        if let liveText = job.liveTranscriptText {
+            job.liveTranscriptText = nil
+            let basename = job.libraryRecordingID
+                ?? job.namingSlug
+                ?? Self.namingSlug(title: job.meetingTitle, jobID: job.id, startTime: job.artifactStartTime)
+            // Assign the durable Library identity before the job is published.
+            // The in-flight row, live-draft sidecar, and final artifacts then
+            // all resolve to one recording rather than briefly showing a
+            // duplicate `job-<uuid>` entry beside the saved live draft.
+            job.namingSlug = basename
+            if let outputDir,
+               !liveText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                do {
+                    job.liveTranscriptPath = try LiveTranscriptStore.save(
+                        liveText,
+                        basename: basename,
+                        directory: outputDir.appendingPathComponent("protocols", isDirectory: true),
+                    )
+                } catch {
+                    job.warnings.append("Live transcript draft could not be saved")
+                    logger.warning("Live transcript draft could not be saved: \(error.localizedDescription, privacy: .private)")
+                }
+            } else {
+                job.warnings.append("Live transcript draft could not be saved")
+            }
+        }
         jobs.append(job)
         eventLog.append(jobID: job.id, event: "enqueued", from: nil, to: job.state)
         saveSnapshot()

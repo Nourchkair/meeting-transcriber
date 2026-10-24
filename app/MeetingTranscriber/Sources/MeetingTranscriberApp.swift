@@ -7,6 +7,7 @@ private let logger = Logger(subsystem: AppPaths.logSubsystem, category: "Launch"
 extension Notification.Name {
     static let autoWatchStart = Notification.Name("autoWatchStart")
     static let showSpeakerNaming = Notification.Name("showSpeakerNaming")
+    static let showLiveAssistant = Notification.Name("showLiveAssistant")
     static let showSettings = Notification.Name("showSettings")
     static let closeSettings = Notification.Name("closeSettings")
 }
@@ -78,6 +79,7 @@ struct MeetingTranscriberApp: App {
         previousExit: AppLauncher.previousExit,
     )
     @State private var captionsWindow: LiveCaptionsWindowController?
+    @State private var liveAssistantShortcutMonitor = LiveAssistantShortcutMonitor()
     @Environment(\.openWindow)
     private var openWindow
 
@@ -128,6 +130,7 @@ struct MeetingTranscriberApp: App {
         recordAppWindow
         transcriptWindow
         recordingsWindow
+        liveAssistantWindow
     }
 
     // MARK: - Menu Bar
@@ -165,10 +168,90 @@ struct MeetingTranscriberApp: App {
             onOpenLibrary: { bringWindowToFront(id: "recordings") },
             onDismissJob: { id in appState.pipelineQueue.removeJob(id: id) },
             onQuit: quit,
+            onOpenLiveAssistant: { bringWindowToFront(id: "live-assistant") },
+            liveAssistantShortcutLabel: LiveAssistantShortcutFormatting.label(
+                keyCode: appState.settings.liveAssistantShortcutKeyCode,
+                modifiers: appState.settings.liveAssistantShortcutModifiers,
+            ),
+            isScreenAwarenessEnabled: appState.settings.continuousScreenAwarenessEnabled,
+            onToggleScreenAwareness: {
+                appState.settings.continuousScreenAwarenessEnabled.toggle()
+            },
+            isPresentationMode: appState.settings.hideSawtiFromScreenSharing,
+            onTogglePresentationMode: {
+                appState.settings.hideSawtiFromScreenSharing.toggle()
+            },
         )
     }
 
     private var menuBarLabel: some View {
+        menuBarIcon
+            .accessibilityLabel(menuBarAccessibilityLabel)
+            .help(menuBarAccessibilityLabel)
+            .onReceive(NotificationCenter.default.publisher(for: .autoWatchStart)) { _ in
+                if !appState.isWatching {
+                    appState.watching.toggleWatching(userInitiated: false)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showSpeakerNaming)) { _ in
+                bringWindowToFront(id: "speaker-naming")
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showLiveAssistant)) { _ in
+                bringWindowToFront(id: "live-assistant")
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showSettings)) { _ in
+                bringWindowToFront(id: "settings")
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .closeSettings)) { _ in
+                closeWindow(id: "settings")
+            }
+            .task {
+                await appState.engines.preloadActiveModel()
+            }
+            .task {
+                appState.updateChecker.startPeriodicChecks(settings: appState.settings)
+            }
+            .task {
+                await appState.permissions.check()
+            }
+            .task {
+                configureLiveAssistantShortcut()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                Task { @MainActor in
+                    await appState.permissions.check(minimumInterval: 3)
+                }
+            }
+            .onChange(of: appState.shouldShowLiveCaptions, initial: true) { _, visible in
+                let controller = captionsWindow ?? LiveCaptionsWindowController(
+                    state: appState.liveCaptions,
+                    size: appState.settings.liveCaptionsSize,
+                    hideFromScreenSharing: appState.settings.hideSawtiFromScreenSharing,
+                )
+                captionsWindow = controller
+                if visible {
+                    controller.show()
+                } else {
+                    controller.hide()
+                }
+            }
+            // The controller is created with the current preset above, and a
+            // hidden bar picks the preset up on `show()`.
+            .onChange(of: appState.settings.liveCaptionsSize) { _, size in
+                captionsWindow?.apply(size: size)
+            }
+            .onChange(of: appState.settings.hideSawtiFromScreenSharing, initial: true) { _, hidden in
+                applyScreenSharingPreference(hidden)
+            }
+            .onChange(of: appState.settings.liveAssistantShortcutKeyCode, initial: true) { _, _ in
+                configureLiveAssistantShortcut()
+            }
+            .onChange(of: appState.settings.liveAssistantShortcutModifiers) { _, _ in
+                configureLiveAssistantShortcut()
+            }
+    }
+
+    private var menuBarIcon: AnimatedMenuBarIcon {
         AnimatedMenuBarIcon(
             badge: appState.currentBadge,
             isWatching: appState.isWatching,
@@ -178,54 +261,10 @@ struct MeetingTranscriberApp: App {
             micSilentOverlay: appState.micSilentOverlay,
             appSilentOverlay: appState.appSilentOverlay,
         )
-        .accessibilityLabel("Sawti — \(appState.currentStateLabel)")
-        .help("Sawti — \(appState.currentStateLabel)")
-        .onReceive(NotificationCenter.default.publisher(for: .autoWatchStart)) { _ in
-            if !appState.isWatching {
-                appState.watching.toggleWatching(userInitiated: false)
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showSpeakerNaming)) { _ in
-            bringWindowToFront(id: "speaker-naming")
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showSettings)) { _ in
-            bringWindowToFront(id: "settings")
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .closeSettings)) { _ in
-            closeWindow(id: "settings")
-        }
-        .task {
-            await appState.engines.preloadActiveModel()
-        }
-        .task {
-            appState.updateChecker.startPeriodicChecks(settings: appState.settings)
-        }
-        .task {
-            await appState.permissions.check()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            // Re-check after returning from System Settings without repeatedly
-            // probing the microphone on rapid application switches.
-            Task { @MainActor in
-                await appState.permissions.check(minimumInterval: 3)
-            }
-        }
-        .onChange(of: appState.shouldShowLiveCaptions, initial: true) { _, visible in
-            let controller = captionsWindow ?? LiveCaptionsWindowController(
-                state: appState.liveCaptions, size: appState.settings.liveCaptionsSize,
-            )
-            captionsWindow = controller
-            if visible {
-                controller.show()
-            } else {
-                controller.hide()
-            }
-        }
-        // Not `initial: true`: the controller is created with the current
-        // preset above, and a hidden bar picks the preset up on `show()`.
-        .onChange(of: appState.settings.liveCaptionsSize) { _, size in
-            captionsWindow?.apply(size: size)
-        }
+    }
+
+    private var menuBarAccessibilityLabel: String {
+        "Sawti — \(appState.currentStateLabel)"
     }
 
     // MARK: - Windows
@@ -237,7 +276,10 @@ struct MeetingTranscriberApp: App {
                 // user works in other apps instead of vanishing on focus loss
                 // (issue #504). Applied via the hosting NSWindow because macOS 14
                 // has no scene-level window-level / collection-behavior modifier.
-                .background(WindowAccessor { NamingWindowPolicy.apply(to: $0) })
+                .background(WindowAccessor { window in
+                    NamingWindowPolicy.apply(to: window)
+                    configureScreenSharing(for: window)
+                })
                 .onAppear {
                     // Close restored window if no naming data available (macOS state restoration)
                     if appState.pipeline.queue.pendingSpeakerNamingJobs.isEmpty {
@@ -278,6 +320,7 @@ struct MeetingTranscriberApp: App {
                 pipelineBusy: appState.pipeline.queue.isProcessing,
                 onSpeakerMutate: appState.pipeline.queue.refreshKnownSpeakerNames,
             )
+            .background(WindowAccessor(configure: configureScreenSharing))
         }
         .windowResizability(.contentSize)
     }
@@ -298,6 +341,7 @@ struct MeetingTranscriberApp: App {
                 },
                 onCancel: { closeWindow(id: "record-app") },
             )
+            .background(WindowAccessor(configure: configureScreenSharing))
         }
         .windowResizability(.contentSize)
     }
@@ -308,6 +352,7 @@ struct MeetingTranscriberApp: App {
                 fileURL: fileURL,
                 securityScopedRoot: appState.settings.effectiveOutputDir,
             )
+            .background(WindowAccessor(configure: configureScreenSharing))
         }
         .defaultSize(width: 840, height: 680)
     }
@@ -321,14 +366,54 @@ struct MeetingTranscriberApp: App {
                     openWindow(id: "transcript", value: url)
                     NSApp.activate(ignoringOtherApps: true)
                 },
+                onOpenAssistant: { item, outputDirectory in
+                    appState.liveAssistant.openRecording(item, outputDirectory: outputDirectory)
+                    bringWindowToFront(id: "live-assistant")
+                },
                 onOpenProtocolsFolder: openProtocolsFolder,
                 onImportMedia: importAudioVideoFiles,
                 onTranscribe: { recordingID, urls in
                     appState.pipeline.enqueueFiles(urls, libraryRecordingID: recordingID)
                 },
             )
+            .background(WindowAccessor(configure: configureScreenSharing))
         }
         .defaultSize(width: 1120, height: 760)
+    }
+
+    private var liveAssistantWindow: some Scene {
+        Window("Live Assistant", id: "live-assistant") {
+            LiveAssistantWindow(
+                assistant: appState.liveAssistant,
+                settings: appState.settings,
+                isRecording: appState.watching.isRecording,
+            )
+            .background(WindowAccessor(configure: configureLiveAssistantWindow))
+        }
+        .defaultSize(width: 500, height: 640)
+    }
+
+    private func configureScreenSharing(for window: NSWindow) {
+        window.sharingType = appState.settings.hideSawtiFromScreenSharing ? .none : .readOnly
+    }
+
+    private func configureLiveAssistantWindow(_ window: NSWindow) {
+        configureScreenSharing(for: window)
+        window.level = .floating
+        window.collectionBehavior.insert(.canJoinAllSpaces)
+    }
+
+    private func configureLiveAssistantShortcut() {
+        appState.settings.liveAssistantShortcutRegistered = liveAssistantShortcutMonitor.register(
+            keyCode: appState.settings.liveAssistantShortcutKeyCode,
+            modifiers: appState.settings.liveAssistantShortcutModifiers,
+        )
+    }
+
+    private func applyScreenSharingPreference(_ hidden: Bool) {
+        let sharingType: NSWindow.SharingType = hidden ? .none : .readOnly
+        NSApp.windows.forEach { $0.sharingType = sharingType }
+        captionsWindow?.setHiddenFromScreenSharing(hidden)
     }
 
     // MARK: - Speaker Naming Window

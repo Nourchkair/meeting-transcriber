@@ -22,7 +22,7 @@ enum JobState: String, Codable {
         case .waiting: "Waiting..."
         case .transcribing: "Transcribing..."
         case .diarizing: "Diarizing..."
-        case .generatingProtocol: "Generating Protocol..."
+        case .generatingProtocol: "Creating AI Notes..."
         case .speakerNamingPending: "Name Speakers..."
         case .done: "Done"
         case .error: "Error"
@@ -135,11 +135,19 @@ struct PipelineJob: Identifiable, Codable {
     /// Optional so snapshots written before Sawti Alpha continue to decode.
     var rawTranscriptPath: URL?
     var protocolPath: URL?
+    /// Persistent live recognition draft associated with this recording.
+    /// `liveTranscriptText` is transient enqueue input and is cleared once the
+    /// draft has been saved; the path remains available in queue snapshots.
+    var liveTranscriptPath: URL?
+    var liveTranscriptText: String?
     var namingSlug: String?
     /// Existing Library record whose transcript is being created or refreshed.
     /// Reprocessing from the Library keeps audio, transcript, and notes under
     /// the same durable recording identity. Optional for old queue snapshots.
     var libraryRecordingID: String?
+    /// Saved assistant chat started during this recording, if one exists.
+    /// Optional so queue snapshots written by earlier builds still decode.
+    var assistantConversationID: UUID?
     // Output policy captured when this job enters the queue. Optional so
     // snapshots saved before transcript-output options existed still decode.
     // Nil falls back to the queue's legacy-compatible defaults.
@@ -284,10 +292,12 @@ struct PipelineJob: Identifiable, Codable {
         meetingStartTime: Date? = nil,
         autoSkipNaming: Bool = false,
         libraryRecordingID: String? = nil,
+        assistantConversationID: UUID? = nil,
         // swiftlint:disable:next discouraged_optional_boolean
         includeFullTranscriptInProtocol: Bool? = nil,
         // swiftlint:disable:next discouraged_optional_boolean
         saveRawTranscriptSeparately: Bool? = nil,
+        liveTranscriptText: String? = nil,
     ) {
         self.id = UUID()
         self.meetingTitle = meetingTitle
@@ -309,8 +319,11 @@ struct PipelineJob: Identifiable, Codable {
         self.transcriptPath = nil
         self.rawTranscriptPath = nil
         self.protocolPath = nil
+        self.liveTranscriptPath = nil
+        self.liveTranscriptText = liveTranscriptText
         self.namingSlug = nil
         self.libraryRecordingID = libraryRecordingID
+        self.assistantConversationID = assistantConversationID
         self.includeFullTranscriptInProtocol = includeFullTranscriptInProtocol
         self.saveRawTranscriptSeparately = saveRawTranscriptSeparately
         self.usedDiarizerMode = nil

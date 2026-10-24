@@ -162,6 +162,11 @@ final class AppState {
     /// by the overlay window + RPC snapshot) and injected into `liveTranscription`.
     let liveCaptions: LiveCaptionsState = .init()
 
+    /// In-meeting assistant state. Messages and captured screen context remain
+    /// in memory for the current process and are reset when a new recording
+    /// starts.
+    let liveAssistant: LiveAssistantController
+
     /// Live-transcription controller lifecycle (lazy creation against the active
     /// engine, pre-warm, per-recording sink installation), extracted into its own
     /// coordinator. `WatchingController`'s recorder factory delegates sink
@@ -226,6 +231,11 @@ final class AppState {
         // Package.swift. A factory with a declared return type collapses the
         // inference here to a plain function reference. Behaviour is identical.
         self.settings = settings
+        liveAssistant = LiveAssistantController(
+            settings: settings,
+            captions: liveCaptions,
+            outputDirectoryProvider: { [settings] in settings.effectiveOutputDir },
+        )
         self.notifier = notifier
         // One shared serial warm-up queue: the ASR engine preload and the
         // live-caption model prewarm both route their loads through it so the
@@ -258,6 +268,7 @@ final class AppState {
             channelHealth: channelHealth,
             permissions: permissions,
             liveTranscription: liveTranscription,
+            liveAssistant: liveAssistant,
         )
 
         #if !APPSTORE
@@ -266,6 +277,14 @@ final class AppState {
             // swiftlint:disable:next trailing_closure
             self.rpcController = RPCServerController(isEnabled: { [settings] in settings.debugRPCEnabled })
         #endif
+
+        self.updateChecker.setIncludePreReleases(settings.includePreReleases)
+        self.updateChecker.setUpdateSafetyCheck { [weak self] in
+            guard let self else { return true }
+            let queue = self.pipeline.queue
+            return !self.watching.isRecording && !queue.isProcessing &&
+                queue.jobs.allSatisfy { $0.state.isTerminal }
+        }
 
         // Wire the active-engine source + the watch-start up-front engine sync
         // (post stored-property init so the `[weak self]` closures are valid).

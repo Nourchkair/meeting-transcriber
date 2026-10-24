@@ -2,7 +2,7 @@
 # Build a self-contained MeetingTranscriber.app bundle.
 #
 # Usage:
-#   ./scripts/build_release.sh [--no-notarize] [--staple] [--appstore]
+#   ./scripts/build_release.sh [--no-notarize] [--staple] [--appstore] [--beta-updates] [--adhoc]
 #
 # Output:
 #   .build/release/MeetingTranscriber.dmg
@@ -20,6 +20,37 @@ set -euo pipefail
 detect_sign_hash() {
     security find-identity -v -p codesigning 2>/dev/null \
         | grep -oE '[0-9A-F]{40}' | head -1 || true
+}
+
+# Sparkle compares CFBundleVersion, which must remain numeric. Reserve the
+# final 999-step slot of each patch for the stable release and map beta/RC
+# ordinals into the preceding slots, so each prerelease can update to the next
+# one and then to stable (for example 0.8.2-beta.1 -> 0.8.2001,
+# 0.8.2-beta.2 -> 0.8.2002, and 0.8.2 -> 0.8.2999).
+bundle_version_for_release() {
+    local version="$1" major minor patch prerelease ordinal encoded_patch
+    if [[ ! "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-([A-Za-z0-9.-]+))?$ ]]; then
+        echo "ERROR: version '$version' must be MAJOR.MINOR.PATCH with an optional prerelease suffix." >&2
+        return 1
+    fi
+    major="${BASH_REMATCH[1]}"
+    minor="${BASH_REMATCH[2]}"
+    patch="${BASH_REMATCH[3]}"
+    prerelease="${BASH_REMATCH[5]:-}"
+
+    if [ -z "$prerelease" ]; then
+        ordinal=999
+    elif [[ "$prerelease" =~ ([0-9]+)$ ]]; then
+        ordinal=$((10#${BASH_REMATCH[1]}))
+    else
+        ordinal=1
+    fi
+    if (( ordinal < 1 || ordinal >= 999 )); then
+        echo "ERROR: prerelease ordinal must be between 1 and 998 in '$version'." >&2
+        return 1
+    fi
+    encoded_patch=$((10#$patch * 1000 + ordinal))
+    printf '%s.%s.%s\n' "$major" "$minor" "$encoded_patch"
 }
 
 # === Source guard: only run the build when executed, not when sourced ===
@@ -47,12 +78,16 @@ RESOURCES="$CONTENTS/Resources"
 NOTARIZE=true
 STAPLE=false
 APPSTORE=false
+BETA_UPDATES=false
+FORCE_ADHOC=false
 OVERRIDE_VERSION=""
 for arg in "$@"; do
     case "$arg" in
         --no-notarize) NOTARIZE=false ;;
         --staple) STAPLE=true ;;
         --appstore) APPSTORE=true ;;
+        --beta-updates) BETA_UPDATES=true ;;
+        --adhoc) FORCE_ADHOC=true ;;
         --version=*) OVERRIDE_VERSION="${arg#--version=}" ;;
     esac
 done
@@ -63,10 +98,12 @@ if [ -n "$OVERRIDE_VERSION" ]; then
 else
     VERSION=$(cat "$PROJECT_ROOT/VERSION" | tr -d '[:space:]')
 fi
+BUNDLE_VERSION="$(bundle_version_for_release "$VERSION")"
 echo "Building MeetingTranscriber v${VERSION}"
 echo "  Notarize:    $NOTARIZE"
 echo "  Staple:      $STAPLE"
 echo "  App Store:   $APPSTORE"
+echo "  Beta feed:   $BETA_UPDATES"
 echo "======================================="
 
 # ── Step 0: Clean previous build ─────────────────────────────────────────────
@@ -123,12 +160,16 @@ echo "Step 2: Assembling app bundle..."
 # Info.plist with version
 cp "$SPM_DIR/Sources/Info.plist" "$CONTENTS/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$CONTENTS/Info.plist"
-BUNDLE_VERSION="${VERSION%%-*}"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUNDLE_VERSION" "$CONTENTS/Info.plist"
 if [ "$APPSTORE" = false ] && [ -n "${SPARKLE_PUBLIC_ED_KEY:-}" ]; then
-    /usr/libexec/PlistBuddy -c "Add :SUFeedURL string https://github.com/Nourchkair/Sawti/releases/latest/download/appcast.xml" \
+    if [ "$BETA_UPDATES" = true ]; then
+        SPARKLE_FEED_URL="https://raw.githubusercontent.com/Nourchkair/Sawti/beta-feed/appcast.xml"
+    else
+        SPARKLE_FEED_URL="https://github.com/Nourchkair/Sawti/releases/latest/download/appcast.xml"
+    fi
+    /usr/libexec/PlistBuddy -c "Add :SUFeedURL string $SPARKLE_FEED_URL" \
         "$CONTENTS/Info.plist" 2>/dev/null || \
-        /usr/libexec/PlistBuddy -c "Set :SUFeedURL https://github.com/Nourchkair/Sawti/releases/latest/download/appcast.xml" \
+        /usr/libexec/PlistBuddy -c "Set :SUFeedURL $SPARKLE_FEED_URL" \
             "$CONTENTS/Info.plist"
     /usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string $SPARKLE_PUBLIC_ED_KEY" \
         "$CONTENTS/Info.plist" 2>/dev/null || \
@@ -275,9 +316,12 @@ if [ "$NOTARIZE" = true ]; then
     fi
 else
     # Use local development certificate if available (extract 40-char hex SHA-1 hash)
-    SIGN_HASH=$(detect_sign_hash)
-    if [ -n "${SAWTI_DEV_SIGNING_IDENTITY:-}" ]; then
-        SIGN_HASH="$SAWTI_DEV_SIGNING_IDENTITY"
+    SIGN_HASH=""
+    if [ "$FORCE_ADHOC" = false ]; then
+        SIGN_HASH=$(detect_sign_hash)
+        if [ -n "${SAWTI_DEV_SIGNING_IDENTITY:-}" ]; then
+            SIGN_HASH="$SAWTI_DEV_SIGNING_IDENTITY"
+        fi
     fi
     if [ -n "$SIGN_HASH" ]; then
         codesign --force --sign "$SIGN_HASH" --identifier "$RELEASE_BUNDLE_ID" \

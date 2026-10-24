@@ -281,7 +281,7 @@ final class PipelineController {
             engine: engine,
             diarizationFactory: { [self] in makeFluidDiarizer(mode: settings.diarizerMode) },
             diarizationFactoryWithMode: { [self] mode in makeFluidDiarizer(mode: mode) },
-            protocolGeneratorFactory: { [self] in makeProtocolGenerator() },
+            protocolGeneratorFactory: { [self] in makeMeetingNotesGenerator() },
             // Captured by value: this is the moment the destination of every job
             // this queue will run is decided, so a fallback is reported here and
             // not from `effectiveOutputDir`, which `body` reads on every render.
@@ -336,36 +336,25 @@ final class PipelineController {
     // routing) that is unit-tested directly, same altitude as the other wiring
     // methods above.
     func makeProtocolGenerator() -> (any ProtocolGenerating)? {
-        switch settings.protocolProvider {
-        #if !APPSTORE
-            case .claudeCLI:
-                ClaudeCLIProtocolGenerator(
-                    claudeBin: settings.claudeBin,
-                    language: settings.protocolLanguage,
-                    anthropicAPIKey: settings.claudeAPIKey.isEmpty ? nil : settings.claudeAPIKey,
-                )
-        #endif
+        AITextGeneratorFactory.make(settings: settings) as? any ProtocolGenerating
+    }
 
-        case .openAICompatible:
-            OpenAIProtocolGenerator(
-                endpoint: URL(string: settings.openAIEndpoint)
-                    // swiftlint:disable:next force_unwrapping
-                    ?? URL(string: AppSettings.defaultOpenAIEndpoint)!,
-                model: settings.openAIModel,
-                language: settings.protocolLanguage,
-                apiKey: settings.openAIAPIKey.isEmpty ? nil : settings.openAIAPIKey,
-            )
+    /// The account-wide AI connection used by future Sawti AI features. Notes
+    /// and the planned live assistant share this provider configuration.
+    func makeAITextGenerator() -> (any AITextGenerating)? {
+        AITextGeneratorFactory.make(settings: settings)
+    }
 
-        case .none:
-            nil
-        }
+    private func makeMeetingNotesGenerator() -> (any ProtocolGenerating)? {
+        guard settings.aiNotesEnabled else { return nil }
+        return makeProtocolGenerator()
     }
 
     func configureCallbacks() {
         queue.onJobStateChange = { [notifier] job, _, newState in
             switch newState {
             case .done:
-                let title = job.protocolPath != nil ? "Protocol Ready" : "Transcript Saved"
+                let title = job.protocolPath != nil ? "AI Notes Ready" : "Transcript Saved"
                 notifier.notify(title: title, body: job.meetingTitle)
 
             case .error:
@@ -428,7 +417,13 @@ final class PipelineController {
                 fromDirectory: group.directory,
                 basename: metadataID,
             )
-            let stableRecordingID = libraryRecordingID ?? libraryMetadata.map { _ in metadataID }
+            // A Sawti record-only sidecar is itself durable Library metadata.
+            // Keep reprocessed audio under its original filename identity so
+            // its saved live draft, final transcript, notes, and audio merge
+            // into the same Library recording even when imported from the
+            // general file picker rather than from a Library row.
+            let stableRecordingID = libraryRecordingID
+                ?? (sidecar == nil && libraryMetadata == nil ? nil : metadataID)
             let title = libraryMetadata?.customTitle ?? libraryMetadata?.title ?? sidecar?.title ?? group.stem
             let appName = sidecar?.appName ?? libraryMetadata?.appName ?? "File"
             let micDelay = sidecar?.micDelaySeconds ?? 0

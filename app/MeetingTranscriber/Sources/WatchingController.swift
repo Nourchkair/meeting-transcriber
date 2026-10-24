@@ -56,6 +56,7 @@ final class WatchingController {
     private let channelHealth: ChannelHealthController
     private let permissions: PermissionsController
     let liveTranscription: LiveTranscriptionCoordinator
+    let liveAssistant: LiveAssistantController?
 
     /// Microphone-access gate. Injectable so tests skip the real TCC prompt; the
     /// return value is intentionally ignored (the loop is created regardless, and
@@ -134,6 +135,7 @@ final class WatchingController {
         channelHealth: ChannelHealthController,
         permissions: PermissionsController,
         liveTranscription: LiveTranscriptionCoordinator,
+        liveAssistant: LiveAssistantController? = nil,
         ensureMicAccess: @escaping () async -> Bool = { await Permissions.ensureMicrophoneAccess() },
         requestScreenRecording: @escaping () -> Void = { Permissions.ensureScreenRecordingAccess() },
         requestAccessibility: @escaping () -> Void = {
@@ -151,6 +153,7 @@ final class WatchingController {
         self.channelHealth = channelHealth
         self.permissions = permissions
         self.liveTranscription = liveTranscription
+        self.liveAssistant = liveAssistant
         self.ensureMicAccess = ensureMicAccess
         self.requestScreenRecording = requestScreenRecording
         self.requestAccessibility = requestAccessibility
@@ -247,6 +250,7 @@ final class WatchingController {
                 pipeline.rebuild()
 
                 let detector = makeDetector()
+                let assistant = liveAssistant
 
                 let loop = WatchLoop(
                     detector: detector,
@@ -263,6 +267,12 @@ final class WatchingController {
                     // cannot be reached is reported there (see the resolver).
                     recordOnlyDestination: { [pipeline] in
                         .production(parent: pipeline.outputDirectory.resolve())
+                    },
+                    finishLiveTranscript: { [liveTranscription] startedAt in
+                        await liveTranscription.finishRecording(startedAt: startedAt)
+                    },
+                    currentAssistantConversationID: { [assistant] in
+                        assistant?.activeConversationID
                     },
                     notifier: notifier,
                     denyListStore: ConsentDenyListStore(settings: settings),
@@ -519,6 +529,12 @@ final class WatchingController {
             recordOnlyDestination: { [pipeline] in
                 .production(parent: pipeline.outputDirectory.resolve())
             },
+            finishLiveTranscript: { [liveTranscription] startedAt in
+                await liveTranscription.finishRecording(startedAt: startedAt)
+            },
+            currentAssistantConversationID: { [weak self] in
+                self?.liveAssistant?.activeConversationID
+            },
             notifier: notifier,
         )
         watchLoop = loop
@@ -583,20 +599,14 @@ final class WatchingController {
     /// `notifyOnRecording` only fires "Meeting Detected" notifications for the
     /// auto-detect path; manual recording emits its own start notification.
     private func attachStateChangeHandler(to loop: WatchLoop, notifyOnRecording: Bool) {
-        loop.onStateChange = { [weak self, weak loop, notifier] oldState, newState in
+        loop.onStateChange = { [weak self, weak loop, notifier] _, newState in
             // Leaving `.recording` (natural meeting end, manual stop, or
             // mid-recording cancel — all route through this transition) is the
             // unified stop signal for both the auto-detect and manual paths.
-            // Flush the live pipeline here so the pending tail utterance is
-            // committed before the next recording's prepareForNextRecording() clears state. The
-            // flush runs after `recorder.stop()` (WatchLoop stops the recorder
-            // before this transition fires); the buffered tail lives in the
-            // streaming actors, not the recorder, so it survives the stop.
-            if oldState == .recording {
-                Task { @MainActor in await self?.liveTranscription.flush() }
-            }
             switch newState {
             case .recording:
+                self?.liveAssistant?.beginRecording()
+                self?.liveAssistant?.setRecordingActive(true)
                 if notifyOnRecording, let meeting = loop?.currentMeeting {
                     notifier.notify(
                         title: "Meeting Detected",
@@ -612,12 +622,14 @@ final class WatchingController {
                 }
 
             case .error:
+                self?.liveAssistant?.setRecordingActive(false)
                 if let err = loop?.lastError {
                     notifier.notify(title: "Error", body: err)
                 }
                 self?.channelHealth.stop()
 
             default:
+                self?.liveAssistant?.setRecordingActive(false)
                 self?.channelHealth.stop()
             }
 

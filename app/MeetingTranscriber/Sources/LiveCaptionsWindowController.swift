@@ -29,6 +29,7 @@ final class LiveCaptionsWindowController {
     private var panel: NSPanel?
     private let state: LiveCaptionsState
     private var size: LiveCaptionsSize
+    private var hideFromScreenSharing: Bool
 
     private var globalModifierMonitor: Any?
     private var localModifierMonitor: Any?
@@ -63,12 +64,14 @@ final class LiveCaptionsWindowController {
     init(
         state: LiveCaptionsState,
         size: LiveCaptionsSize = .medium,
+        hideFromScreenSharing: Bool = true,
         defaults: UserDefaults = .standard,
         buttonPressed: @escaping () -> Bool = { NSEvent.pressedMouseButtons & 1 != 0 },
         now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
     ) {
         self.state = state
         self.size = size
+        self.hideFromScreenSharing = hideFromScreenSharing
         self.defaults = defaults
         self.buttonPressed = buttonPressed
         self.now = now
@@ -152,6 +155,13 @@ final class LiveCaptionsWindowController {
         panel?.orderOut(nil)
     }
 
+    /// Exclude or include the caption panel in screen sharing, matching the
+    /// user's presentation-mode preference.
+    func setHiddenFromScreenSharing(_ hidden: Bool) {
+        hideFromScreenSharing = hidden
+        panel?.sharingType = hidden ? .none : .readOnly
+    }
+
     private func ensurePanel() -> NSPanel {
         if let panel { return panel }
 
@@ -178,6 +188,7 @@ final class LiveCaptionsWindowController {
         panel.hidesOnDeactivate = false
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
+        panel.sharingType = hideFromScreenSharing ? .none : .readOnly
         self.panel = panel
         installModifierMonitor(for: panel)
         installMouseMonitor(for: panel)

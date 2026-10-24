@@ -84,15 +84,17 @@ enum ProtocolProvider: String, CaseIterable {
         case claudeCLI
     #endif
     case openAICompatible
+    case chatGPTPlan
     case none // swiftlint:disable:this discouraged_none_name
 
     var label: String {
         switch self {
         #if !APPSTORE
-            case .claudeCLI: "Claude CLI"
+            case .claudeCLI: "Claude subscription or API key"
         #endif
 
-        case .openAICompatible: "OpenAI-Compatible API"
+        case .openAICompatible: "OpenAI API or local model"
+        case .chatGPTPlan: "ChatGPT subscription"
 
         case .none: "None (Transcript Only)"
         }
@@ -150,6 +152,10 @@ final class AppSettings {
     /// use for its own Anthropic key — the user opts a key into this app
     /// specifically, rather than reusing a credential another tool manages.
     @ObservationIgnored private let claudeAPIKeyAccount: String
+    @ObservationIgnored private let chatGPTPlanCredentialAccount: String
+    /// One shared actor owns the ChatGPT plan credentials and serializes
+    /// refreshes for every Sawti feature using the account.
+    @ObservationIgnored let chatGPTPlanCredentialStore: ChatGPTPlanCredentialStore
 
     // MARK: - Apps to Watch
 
@@ -497,6 +503,38 @@ final class AppSettings {
         didSet { defaults.set(protocolProvider.rawValue, forKey: "protocolProvider") }
     }
 
+    /// Explicit opt-in for automatic post-recording AI requests. Selecting or
+    /// connecting a provider alone does not send recording transcripts.
+    var aiNotesEnabled: Bool {
+        didSet { defaults.set(aiNotesEnabled, forKey: "aiNotesEnabled") }
+    }
+
+    /// Excludes every Sawti window (including caption and assistant panels)
+    /// from screen sharing and screen capture when enabled.
+    var hideSawtiFromScreenSharing: Bool {
+        didSet { defaults.set(hideSawtiFromScreenSharing, forKey: "hideSawtiFromScreenSharing") }
+    }
+
+    /// While a recording is active, retain the latest main-display frame in
+    /// memory for screen-aware assistant questions. The frame is sent only
+    /// when the user asks a question, and the feature is opt-in.
+    var continuousScreenAwarenessEnabled: Bool {
+        didSet { defaults.set(continuousScreenAwarenessEnabled, forKey: "continuousScreenAwarenessEnabled") }
+    }
+
+    /// Carbon virtual key code and modifier mask for the global Live Assistant
+    /// shortcut. Defaults to ⌘⇧A.
+    var liveAssistantShortcutKeyCode: Int {
+        didSet { defaults.set(liveAssistantShortcutKeyCode, forKey: "liveAssistantShortcutKeyCode") }
+    }
+
+    var liveAssistantShortcutModifiers: Int {
+        didSet { defaults.set(liveAssistantShortcutModifiers, forKey: "liveAssistantShortcutModifiers") }
+    }
+
+    /// Runtime registration result; intentionally not persisted.
+    var liveAssistantShortcutRegistered = true
+
     var protocolLanguage: String {
         didSet { defaults.set(protocolLanguage, forKey: "protocolLanguage") }
     }
@@ -539,6 +577,21 @@ final class AppSettings {
 
     var openAIModel: String {
         didSet { defaults.set(openAIModel, forKey: "openAIModel") }
+    }
+
+    var chatGPTPlanModel: String {
+        didSet { defaults.set(chatGPTPlanModel, forKey: "chatGPTPlanModel") }
+    }
+
+    var chatGPTPlanCredentialJSON: String {
+        get { KeychainHelper.read(key: chatGPTPlanCredentialAccount) ?? "" }
+        set {
+            if newValue.isEmpty {
+                KeychainHelper.delete(key: chatGPTPlanCredentialAccount)
+            } else {
+                KeychainHelper.save(key: chatGPTPlanCredentialAccount, value: newValue)
+            }
+        }
     }
 
     var openAIAPIKey: String {
@@ -619,11 +672,14 @@ final class AppSettings {
         defaults: UserDefaults = .standard,
         apiKeyAccount: String = "openAIAPIKey",
         claudeAPIKeyAccount: String = "claudeAPIKey",
+        chatGPTPlanCredentialAccount: String = "chatGPTPlanCredentials",
         defaultOutputDir: URL = AppPaths.downloadsProtocolsDir,
     ) {
         self.defaults = defaults
         self.apiKeyAccount = apiKeyAccount
         self.claudeAPIKeyAccount = claudeAPIKeyAccount
+        self.chatGPTPlanCredentialAccount = chatGPTPlanCredentialAccount
+        chatGPTPlanCredentialStore = ChatGPTPlanCredentialStore(keychainAccount: chatGPTPlanCredentialAccount)
         self.defaultOutputDir = defaultOutputDir
 
         watchTeams = defaults.object(forKey: "watchTeams") as? Bool ?? true
@@ -698,12 +754,18 @@ final class AppSettings {
             claudeBin = defaults.object(forKey: "claudeBin") as? String ?? "claude"
         #endif
         protocolLanguage = defaults.string(forKey: "protocolLanguage") ?? "English"
+        aiNotesEnabled = defaults.object(forKey: "aiNotesEnabled") as? Bool ?? false
+        hideSawtiFromScreenSharing = defaults.object(forKey: "hideSawtiFromScreenSharing") as? Bool ?? true
+        continuousScreenAwarenessEnabled = defaults.object(forKey: "continuousScreenAwarenessEnabled") as? Bool ?? false
+        liveAssistantShortcutKeyCode = defaults.object(forKey: "liveAssistantShortcutKeyCode") as? Int ?? 0
+        liveAssistantShortcutModifiers = defaults.object(forKey: "liveAssistantShortcutModifiers") as? Int ?? 0x300
         includeFullTranscriptInProtocol = defaults.object(forKey: "includeFullTranscriptInProtocol") as? Bool ?? true
         saveRawTranscriptSeparately = defaults.object(forKey: "saveRawTranscriptSeparately") as? Bool ?? true
 
         openAIEndpoint = defaults.object(forKey: "openAIEndpoint") as? String
             ?? Self.defaultOpenAIEndpoint
         openAIModel = defaults.object(forKey: "openAIModel") as? String ?? "llama3.1"
+        chatGPTPlanModel = defaults.object(forKey: "chatGPTPlanModel") as? String ?? "gpt-6.1-sol"
         customOutputDirBookmark = defaults.data(forKey: "customOutputDirBookmark")
 
         // Migrate legacy "audioDebugLogging" key (renamed to "verboseDiagnostics" 2026-05-04).

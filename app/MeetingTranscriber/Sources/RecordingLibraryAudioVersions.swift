@@ -144,6 +144,7 @@ extension RecordingLibraryIndex {
             originalProtocolFilename: originalProtocolFilename,
             audioIsEdited: mode == .replaceOriginal ? true : old?.audioIsEdited,
             recordingSource: item.recordingSource,
+            assistantConversationID: old?.assistantConversationID ?? item.assistantConversationID,
         )
 
         let separateEdits = mode == .replaceOriginal ? Array(edits.dropFirst()) : edits

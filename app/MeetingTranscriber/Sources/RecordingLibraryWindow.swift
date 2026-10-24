@@ -8,6 +8,7 @@ struct RecordingLibraryWindow: View {
     let outputDirectory: URL
     let jobs: [PipelineJob]
     let onOpenTranscript: (URL) -> Void
+    let onOpenAssistant: (RecordingLibraryItem, URL) -> Void
     let onOpenProtocolsFolder: () -> Void
     let onImportMedia: () -> Void
     let onTranscribe: (String, [URL]) -> Void
@@ -69,7 +70,7 @@ struct RecordingLibraryWindow: View {
 
     private var reloadKey: String {
         let jobKey = jobs.map { job in
-            [job.id.uuidString, job.state.rawValue, job.libraryRecordingID ?? "", job.namingSlug ?? "", job.transcriptPath?.path ?? ""]
+            [job.id.uuidString, job.state.rawValue, job.libraryRecordingID ?? "", job.namingSlug ?? "", job.transcriptPath?.path ?? "", job.liveTranscriptPath?.path ?? ""]
                 .joined(separator: ":")
         }.joined(separator: "|")
         return "\(outputDirectory.path)|\(jobKey)"
@@ -125,6 +126,7 @@ struct RecordingLibraryWindow: View {
                     outputDirectory: outputDirectory,
                     workspaces: workspaces,
                     onOpenTranscript: onOpenTranscript,
+                    onOpenAssistant: { onOpenAssistant(selectedEntry, outputDirectory) },
                     onTranscribe: onTranscribe,
                     isTranscribing: isTranscribing(selectedEntry),
                     onWorkspaceChanged: { id in updateWorkspace(for: selectedEntry, to: id) },
@@ -710,6 +712,7 @@ private struct RecordingLibraryDetail: View {
     let outputDirectory: URL
     let workspaces: [RecordingLibraryWorkspace]
     let onOpenTranscript: (URL) -> Void
+    let onOpenAssistant: () -> Void
     let onTranscribe: (String, [URL]) -> Void
     let isTranscribing: Bool
     let onWorkspaceChanged: (UUID?) -> Void
@@ -827,6 +830,16 @@ private struct RecordingLibraryDetail: View {
         HStack(spacing: 8) {
             if let audioURL = item.audioURL {
                 Button {
+                    onOpenAssistant()
+                } label: {
+                    Label(
+                        item.assistantConversationID == nil ? "Ask Assistant" : "Continue Assistant",
+                        systemImage: "sparkles",
+                    )
+                }
+                .help("Ask questions about this recording and continue its saved assistant conversation")
+
+                Button {
                     let urls = item.transcriptionURLs(outputDirectory: outputDirectory)
                     if !urls.isEmpty { onTranscribe(item.id, urls) }
                 } label: {
@@ -863,6 +876,12 @@ private struct RecordingLibraryDetail: View {
                     onOpenTranscript(transcriptURL)
                 }
                 .help("Open the transcript editor")
+            }
+            if let liveTranscriptURL = item.liveTranscriptURL {
+                Button("Open Live Draft", systemImage: "text.bubble") {
+                    onOpenTranscript(liveTranscriptURL)
+                }
+                .help("Review the live draft captured during the meeting; its timestamps are approximate and the finalized transcript is the polished version")
             }
             if let protocolURL = item.protocolURL {
                 Button("Open Meeting Notes", systemImage: "doc.text") {
