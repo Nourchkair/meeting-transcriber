@@ -45,7 +45,7 @@ bundle_version_for_release() {
     else
         ordinal=1
     fi
-    if (( ordinal < 1 || ordinal >= 999 )); then
+    if [ -n "$prerelease" ] && (( ordinal < 1 || ordinal >= 999 )); then
         echo "ERROR: prerelease ordinal must be between 1 and 998 in '$version'." >&2
         return 1
     fi
